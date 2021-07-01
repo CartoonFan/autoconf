@@ -210,8 +210,8 @@ This manual (@value{UPDATED}) is for GNU Autoconf
 a package for creating scripts to configure source code packages using
 templates and an M4 macro package.
 
-Copyright @copyright{} 1992--1996, 1998--2017, 2020
-Free Software Foundation, Inc.
+Copyright @copyright{} 1992--1996, 1998--2017, 2020--2021 Free Software
+Foundation, Inc.
 
 @quotation
 Permission is granted to copy, distribute and/or modify this document
@@ -797,12 +797,10 @@ short @file{configure.ac} that demonstrates the problem.
 Autoconf's development tree is accessible via @command{git}; see the
 @uref{https://@/savannah.gnu.org/@/projects/@/autoconf/, Autoconf
 Summary} for details, or view
-@uref{https://@/git.sv.gnu.org/@/gitweb/@/?p=autoconf.git, the actual
-repository}.  Anonymous CVS access is also available, see
-@file{README} for more details.  Patches relative to the
-current @command{git} version can be sent for review to the
-@email{autoconf-patches@@gnu.org, Autoconf Patches mailing list}, with
-discussion on prior patches
+@uref{https://@/git.savannah.gnu.org/@/cgit/@/autoconf.git, the actual
+repository}.  Patches relative to the current @command{git} version can
+be sent for review to the @email{autoconf-patches@@gnu.org, Autoconf
+Patches mailing list}, with discussion on prior patches
 @uref{https://@/lists.gnu.org/@/archive/@/html/@/autoconf-@/patches/,
 archived}; and all commits are posted in the read-only
 @email{autoconf-commit@@gnu.org, Autoconf Commit mailing list}, which is
@@ -908,6 +906,9 @@ conforms to C11, even on old-fashioned hosts that lack @file{stdalign.h}.
 This module contains a source file for the replacement header, along
 with an Autoconf macro that arranges to use the replacement header on
 old-fashioned systems.
+
+For more information, consult the Gnulib website,
+@uref{https://@/www.gnu.org/@/software/@/gnulib/}.
 
 @node Libtool
 @section Libtool
@@ -1706,10 +1707,11 @@ properly, but does not pass @option{--autoconf-dir=@var{dir}} or
 @cindex @command{autopoint}
 Gettext supplies the @command{autopoint} command to add translation
 infrastructure to a source package.  If you use @command{autopoint},
-your @file{configure.ac} should invoke both @code{AM_GNU_GETTEXT} and
-@code{AM_GNU_GETTEXT_VERSION(@var{gettext-version})}.  @xref{autopoint
-Invocation, , Invoking the @code{autopoint} Program, gettext,
-GNU @code{gettext} utilities}, for further details.
+your @file{configure.ac} should invoke @code{AM_GNU_GETTEXT} and
+one of @code{AM_GNU_GETTEXT_VERSION(@var{gettext-version})} or
+@code{AM_GNU_GETTEXT_REQUIRE_VERSION(@var{min-gettext-version})}.
+@xref{autopoint Invocation, , Invoking the @code{autopoint} Program,
+gettext, GNU @code{gettext} utilities}, for further details.
 
 @noindent
 @command{autoreconf} accepts the following options:
@@ -1876,21 +1878,88 @@ distribution tar ball names (e.g., @samp{autoconf}).  It defaults to
 other than alphanumerics and underscores are changed to @samp{-}.  If
 provided, @var{url} should be the home page for the package.
 
-All the arguments of @code{AC_INIT} must be static, i.e., there should not
-be any shell computation, quotes, or newlines, but they can be computed
-by M4.  This is because the package information strings are expanded at
-M4 time into several contexts, and must give the same text at shell time
-whether used in single-quoted strings, double-quoted strings, quoted
-here-documents, or unquoted here-documents.  It is permissible to use
-@code{m4_esyscmd} or @code{m4_esyscmd_s} for computing a version string
-that changes with every commit to a version control system (in fact,
-Autoconf does just that, for all builds of the development tree made
-between releases).
+Leading and trailing whitespace is stripped from all the arguments to
+@code{AC_INIT}, and interior whitespace is collapsed to a single space.
+This means that, for instance, if you want to put several email
+addresses in @var{bug-report}, you can put each one on its own line:
 
-The @var{tarname} argument is used to construct filenames.
-In addition to being static, it should not contain wildcard
-characters, white space, or anything else that could be troublesome
-as part of a file or directory name.
+@smallexample
+@group
+# We keep having problems with the mail hosting for
+# gnomovision.example, so give people an alternative.
+AC_INIT([Gnomovision], [17.0.1], [
+    bugs@@gnomovision.example
+    or gnomo-bugs@@reliable-email.example
+])
+@end group
+@end smallexample
+
+The arguments to @code{AC_INIT} may be computed by M4, when
+@command{autoconf} is run.  For instance, if you want to include the
+package's version number in the @var{tarname}, but you don't want to
+repeat it, you can use a helper macro:
+
+@smallexample
+@group
+m4_define([gnomo_VERSION], [17.0.1])
+AC_INIT([Gnomovision],
+        m4_defn([gnomo_VERSION]),
+        [bugs@@gnomovision.example],
+        [gnomo-]m4_defn([gnomo_VERSION]))
+@end group
+@end smallexample
+
+This uses @code{m4_defn} to produce the expansion of
+@code{gnomo_VERSION} @emph{as a quoted string}, so that if there happen
+to be any more M4 macro names in @code{gnomo_VERSION}, they will not be
+expanded. @xref{Defn,,Renaming Macros,m4,GNU m4 macro processor}.
+
+Continuing this example, if you don't want to embed the version number
+in @file{configure.ac} at all, you can use @code{m4_esyscmd} to look it
+up somewhere else when @command{autoconf} is run:
+
+@smallexample
+@group
+m4_define([gnomo_VERSION],
+  m4_esyscmd([build-aux/git-version-gen .tarball-version]))
+AC_INIT([Gnomovision],
+        m4_defn([gnomo_VERSION]),
+        [bugs@@gnomovision.example],
+        [gnomo-]m4_defn([gnomo_VERSION]))
+@end group
+@end smallexample
+
+This uses the utility script @command{git-version-gen} to look up
+the package's version in its version control metadata.  This script
+is part of Gnulib (@pxref{Gnulib}).
+
+The arguments to @code{AC_INIT} are written into @file{configure} in
+several different places.  Therefore, we strongly recommend that you
+write any M4 logic in @code{AC_INIT} arguments to be evaluated
+@emph{before} @code{AC_INIT} itself is evaluated.  For instance, in the
+above example, the second argument to @code{m4_define} is @emph{not}
+quoted, so the @code{m4_esyscmd} is evaluated only once, and
+@code{gnomo_VERSION} is defined to the output of the command.  If the
+second argument to @code{m4_define} were quoted, @code{m4_esyscmd} would
+be evaluated each time the @var{version} or @var{tarname} arguments were
+written to @file{configure}, and the command would be run repeatedly.
+
+In some of the places where the arguments to @code{AC_INIT} are used,
+within @file{configure}, shell evaluation cannot happen.  Therefore, the
+arguments to @code{AC_INIT} may @emph{not} be computed when
+@command{configure} is run.  If they contain any construct that isn't
+always treated as literal by the shell (e.g.@: variable expansions),
+@command{autoconf} will issue an error.
+
+The @var{tarname} argument is used to construct filenames.  It should
+not contain wildcard characters, white space, or anything else that
+could be troublesome as part of a file or directory name.
+
+Some of M4's active characters (notably parentheses, square brackets,
+@samp{,} and @samp{#}) commonly appear in URLs and lists of email
+addresses.  If any of these characters appear in an argument to AC_INIT,
+that argument will probably need to be double-quoted to avoid errors
+and mistranscriptions.  @xref{M4 Quotation}.
 
 The following M4 macros (e.g., @code{AC_PACKAGE_NAME}), output variables
 (e.g., @code{PACKAGE_NAME}), and preprocessor symbols (e.g.,
@@ -2536,9 +2605,18 @@ instead.  If it affects only the linker (e.g., @option{-L@var{directory}}),
 it should be put into @code{LDFLAGS} instead.  If it
 affects only the compiler proper, @code{CFLAGS} is the natural home for
 it.  If an option affects multiple phases of the compiler, though,
-matters get tricky.  One approach to put such options directly into
-@code{CC}, e.g., @code{CC='gcc -m64'}.  Another is to put them into both
-@code{CPPFLAGS} and @code{LDFLAGS}, but not into @code{CFLAGS}.
+matters get tricky:
+
+@itemize @bullet
+@item
+If an option selects a 32-bit or 64-bit build on a bi-arch system, it
+must be put direcly into @code{CC}, e.g., @code{CC='gcc -m64'}.  This is
+necessary for @code{config.guess} to work right.
+@item
+Otherwise one approach is to put the option into @code{CC}.  Another is
+to put it into both @code{CPPFLAGS} and @code{LDFLAGS}, but not into
+@code{CFLAGS}.
+@end itemize
 
 However, remember that some @file{Makefile} variables are reserved by
 the GNU Coding Standards for the use of the ``user''---the person
@@ -3992,23 +4070,29 @@ Expand to @var{include-directives} if present and nonempty, otherwise to:
 @example
 @group
 #include <stddef.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#ifdef HAVE_SYS_TYPES_H
-# include <sys/types.h>
+#ifdef HAVE_STDIO_H
+# include <stdio.h>
 #endif
-#ifdef HAVE_SYS_STAT_H
-# include <sys/stat.h>
+#ifdef HAVE_STDLIB_H
+# include <stdlib.h>
 #endif
-#ifdef HAVE_STRINGS_H
-# include <strings.h>
+#ifdef HAVE_STRING_H
+# include <string.h>
 #endif
 #ifdef HAVE_INTTYPES_H
 # include <inttypes.h>
 #endif
 #ifdef HAVE_STDINT_H
 # include <stdint.h>
+#endif
+#ifdef HAVE_STRINGS_H
+# include <strings.h>
+#endif
+#ifdef HAVE_SYS_TYPES_H
+# include <sys/types.h>
+#endif
+#ifdef HAVE_SYS_STAT_H
+# include <sys/stat.h>
 #endif
 #ifdef HAVE_UNISTD_H
 # include <unistd.h>
@@ -4017,12 +4101,26 @@ Expand to @var{include-directives} if present and nonempty, otherwise to:
 @end example
 
 Using this macro without @var{include-directives} has the side effect of
-checking for @file{sys/types.h}, @file{sys/stat.h}, @file{strings.h},
-@file{inttypes.h}, @file{stdint.h}, and @file{unistd.h}, as if by
-@code{AC_CHECK_HEADERS}.  For backward compatibility's sake, it also
-unconditionally defines @code{HAVE_STRING_H}, @code{HAVE_STDLIB_H}, and
-@code{STDC_HEADERS}.  New code should not make use of these preprocessor
-macros.
+checking for @file{stdio.h}, @file{stdlib.h}, @file{string.h},
+@file{inttypes.h}, @file{stdint.h}, @file{strings.h},
+@file{sys/types.h}, @file{sys/stat.h}, and @file{unistd.h}, as if by
+@code{AC_CHECK_HEADERS_ONCE}.  For backward compatibility, the macro
+@code{STDC_HEADERS} will be defined when both @file{stdlib.h} and
+@file{string.h} are available.
+
+@strong{Portability Note:} It is safe for most programs to assume the
+presence of all of the headers required by the original 1990 C standard.
+@code{AC_INCLUDES_DEFAULT} checks for @file{stdio.h}, @file{stdlib.h},
+and @file{string.h}, even though they are in that list, because they
+might not be available when compiling for a ``freestanding environment''
+(in which most of the features of the C library are optional).  You
+probably do not need to write @samp{#ifdef HAVE_STDIO_H} in your own
+code.
+
+@file{inttypes.h} and @file{stdint.h} were added to C in the 1999
+revision of the standard, and @file{strings.h}, @file{sys/types.h},
+@file{sys/stat.h}, and @file{unistd.h} are POSIX extensions.  You
+@emph{should} guard uses of these headers with appropriate conditionals.
 @end defmac
 
 @defmac AC_CHECK_INCLUDES_DEFAULT
@@ -5530,13 +5628,17 @@ If @code{setpgrp} takes no argument (the Posix version), define
 @code{SETPGRP_VOID}.  Otherwise, it is the BSD version, which takes
 two process IDs as arguments.  This macro does not check whether
 @code{setpgrp} exists at all; if you need to work in that situation,
-first call @code{AC_CHECK_FUNC} for @code{setpgrp}.
+first call @code{AC_CHECK_FUNC} for @code{setpgrp}.  This macro also
+does not check for the Solaris variant of @code{setpgrp}, which returns
+a @code{pid_t} instead of an @code{int}; portable code should only use
+the return value by comparing it against @code{-1} to check for errors.
 
 The result of this macro is cached in the @code{ac_cv_func_setpgrp_void}
 variable.
 
-This macro is obsolescent, as current systems have a @code{setpgrp}
-whose signature conforms to Posix.  New programs need not use this macro.
+This macro is obsolescent, as all forms of @code{setpgrp} are also
+obsolescent.  New programs should use the Posix function @code{setpgid},
+which takes two process IDs as arguments (like the BSD @code{setpgrp}).
 @end defmac
 
 @defmac AC_FUNC_STAT
@@ -6481,12 +6583,6 @@ parentheses for types which can be zero-initialized:
 AC_CHECK_DECL([basename(char *)])
 @end example
 
-Some compilers don't indicate every missing declaration by the error
-status.  This macro checks the standard error from such compilers and
-considers a declaration missing if any warnings have been reported.  For
-most compilers, though, warnings do not affect this macro's outcome
-unless @code{AC_LANG_WERROR} is also specified.
-
 This macro caches its result in the @code{ac_cv_have_decl_@var{symbol}}
 variable, with characters not suitable for a variable name mapped to
 underscores.
@@ -6546,12 +6642,6 @@ void *malloc (size_t *s);
 You fall into the second category only in extreme situations: either
 your files may be used without being configured, or they are used during
 the configuration.  In most cases the traditional approach is enough.
-
-Some compilers don't indicate every missing declaration by the error
-status.  This macro checks the standard error from such compilers and
-considers a declaration missing if any warnings have been reported.  For
-most compilers, though, warnings do not affect this macro's outcome
-unless @code{AC_LANG_WERROR} is also specified.
 
 This macro caches its results in @code{ac_cv_have_decl_@var{symbol}}
 variables, with characters not suitable for a variable name mapped to
@@ -7363,58 +7453,70 @@ makes this invalid.  That is why Autoconf stopped issuing
 @evindex CFLAGS
 @ovindex CC
 @ovindex CFLAGS
-@caindex prog_cc_stdc
-Determine a C compiler to use.  If @code{CC} is not already set in the
-environment, check for @code{gcc} and @code{cc}, then for other C
-compilers.  Set output variable @code{CC} to the name of the compiler
-found.
+Determine a C compiler to use.
 
-This macro may, however, be invoked with an optional first argument
-which, if specified, must be a blank-separated list of C compilers to
-search for.  This just gives the user an opportunity to specify an
-alternative search list for the C compiler.  For example, if you didn't
-like the default order, then you could invoke @code{AC_PROG_CC} like
-this:
+If the environment variable @code{CC} is set, its value will be taken as
+the name of the C compiler to use.  Otherwise, search for a C compiler
+under a series of likely names, trying @code{gcc} and @code{cc} first.
+Regardless, the output variable @code{CC} is set to the chosen compiler.
+
+If the optional first argument to the macro is used, it must be a
+whitespace-separated list of potential names for a C compiler,
+which overrides the built-in list.
+
+If no C compiler can be found, @command{configure} will error out.
+
+If the selected C compiler is found to be GNU C (regardless of
+its name), the shell variable @code{GCC} will be set to @samp{yes}.
+If the shell variable @code{CFLAGS} was not already set, it is set
+to @option{-g -O2} for the GNU C compiler (@option{-O2} on systems
+where GCC does not accept @option{-g}), or @option{-g} for other
+compilers.  @code{CFLAGS} is then made an output variable.
+You can override the default for @code{CFLAGS} by inserting a shell
+default assignment between @code{AC_INIT} and @code{AC_PROG_CC}:
 
 @example
-AC_PROG_CC([gcc cl cc])
+: $@{CFLAGS="@var{options}"@}
 @end example
 
-If necessary, add an option to output variable @code{CC} to enable
-support for ISO Standard C features with extensions.  Prefer the newest
-C standard that is supported.  Currently the newest standard is ISO C11,
-with ISO C99 and ANSI C89 (ISO C90) being the older versions.
-After calling this macro you can check whether the C compiler has been
-set to accept Standard C; if not, the shell variable
-@code{ac_cv_prog_cc_stdc} is set to @samp{no}.
+where @var{options} are the appropriate set of options to use by
+default.  (It is important to use this construct rather than a normal
+assignment, so that @code{CFLAGS} can still be overridden by the
+person building the package.  @xref{Preset Output Variables}.)
 
-When attempting to add compiler options, prefer extended functionality
-to strict conformance: the goal is to enable whatever standard features
-that are available, not to check for full conformance to the standard or
-to prohibit incompatible extensions.  Test for C11 support by checking
-for @code{_Alignas}, @code{_Alignof}, @code{_Noreturn},
-@code{_Static_assert}, UTF-8 string literals, duplicate @code{typedef}s,
-and anonymous structures and unions.  Test for C99 support by checking
-for @code{_Bool}, @code{//} comments, flexible array members,
-@code{inline}, signed and unsigned @code{long long int}, mixed code and
-declarations, named initialization of structs, @code{restrict},
-@code{va_copy}, varargs macros, variable declarations in @code{for}
-loops, and variable length arrays.  Test for C89 support by checking for
-function prototypes.
+If necessary, options are added to @code{CC} to enable support for
+ISO Standard C features with extensions, preferring the newest edition
+of the C standard that is supported.  Currently the newest edition
+Autoconf knows how to detect support for is ISO C 2011.  After calling
+this macro you can check whether the C compiler has been set to accept
+standard C by inspecting the shell variable @code{ac_prog_cc_stdc}.
+Its value will be @samp{c11}, @samp{c99}, or @samp{c89}, respectively,
+if the C compiler has been set to use the 2011, 1999, or 1990 edition of
+the C standard, and @samp{no} if the compiler does not support compiling
+standard C at all.
 
-If using a compiler that supports GNU C, set shell variable @code{GCC} to
-@samp{yes}.  If output variable @code{CFLAGS} was not already set, set
-it to @option{-g -O2} for a GNU C compiler (@option{-O2} on systems
-where the compiler does not accept @option{-g}), or @option{-g} for
-other compilers.  If your package does not like this default, then it is
-acceptable to insert the line @samp{: $@{CFLAGS=""@}} after @code{AC_INIT}
-and before @code{AC_PROG_CC} to select an empty default instead.
+The tests for standard conformance are not comprehensive.  They test the
+values of @code{__STDC__} and @code{__STDC_VERSION__}, and a
+representative sample of the language features added in each version of
+the C standard.  They do not test the C standard library, because the C
+compiler might be generating code for a ``freestanding environment''
+(in which most of the standard library is optional).  If you need to know
+whether a particular C standard header exists, use @code{AC_CHECK_HEADER}.
+
+None of the options that may be added to @code{CC} by this macro
+enable @emph{strict} conformance to the C standard.  In particular,
+system-specific extensions are not disabled.  (For example, for GNU C,
+the @option{-std=gnu@var{nn}} options may be used, but not the
+@option{-std=c@var{nn}} options.)
 
 Many Autoconf macros use a compiler, and thus call
 @samp{AC_REQUIRE([AC_PROG_CC])} to ensure that the compiler has been
 determined before the body of the outermost @code{AC_DEFUN} macro.
-@code{AC_PROG_CC} is therefore defined via @code{AC_DEFUN_ONCE} to avoid
-needless reexpansion (@pxref{One-Shot Macros}).
+Although @code{AC_PROG_CC} is safe to directly expand multiple times, it
+performs certain checks (such as the proper value of @env{EXEEXT}) only
+on the first invocation.  Therefore, care must be used when invoking
+this macro from within another macro rather than at the top level
+(@pxref{Expanded Before Required}).
 @end defmac
 
 @anchor{AC_PROG_CC_C_O}
@@ -7781,24 +7883,24 @@ assignment, so that @code{CXXFLAGS} can still be overridden by the
 person building the package.  @xref{Preset Output Variables}.)
 
 If necessary, options are added to @code{CXX} to enable support for
-ISO Standard C++ features with extensions.  ISO C++ 2011 is preferred
-if the compiler supports it.  After calling this macro, you can check
-whether the C++ compiler has been set to accept standard C++ by
-inspecting cache variables.  If @code{ac_cv_prog_cxx_cxx11} is set to
-any value other than @samp{no} (including the empty string), then
-@code{CXX} can compile code as standard C++ 2011, and this mode has
-been enabled.  Otherwise, if @code{ac_cv_prog_cxx_cxx98} is set to
-any value other than @samp{no} (including the empty string), then
-@code{CXX} can compile code as standard C++ 1998, and this mode has
-been enabled.  Finally, if both variables are set to @samp{no}, then
-@code{CXX} cannot compile standard C++ at all.
+ISO Standard C++ features with extensions, preferring the newest edition
+of the C++ standard that is supported.  Currently the newest edition
+Autoconf knows how to detect support for is ISO C++ 2011.  After calling
+this macro, you can check whether the C++ compiler has been set to
+accept standard C++ by inspecting the shell variable @code{ac_prog_cxx_stdcxx}.
+Its value will be @samp{cxx11} or @samp{cxx98}, respectively,
+if the C++ compiler has been set to use the 2011 or 1990 edition of the
+C++ standard, and @samp{no} if the compiler does not support compiling
+standard C++ at all.
 
 The tests for standard conformance are not comprehensive.  They test
 the value of @code{__cplusplus} and a representative sample of the
-language features added in each version of the C++ standard.  They do
-not exercise the C++ standard library, because this can be extremely
-slow.  If you need to know whether a particular C++ standard header
-exists, use @code{AC_CHECK_HEADER}.
+language features added in each version of the C++ standard.  They
+do not test the C++ standard library, because this can be extremely
+slow, and because the C++ compiler might be generating code for a
+``freestanding environment'' (in which most of the C++ standard library
+is optional).  If you need to know whether a particular C++ standard
+header exists, use @code{AC_CHECK_HEADER}.
 
 None of the options that may be added to @code{CXX} by this macro
 enable @emph{strict} conformance to the C++ standard.  In particular,
@@ -8797,44 +8899,31 @@ disable the extensions, typically due to standards-conformance namespace
 issues.  This should be called before any macros that run the C
 compiler.  Also, when using this macro in concert with
 @code{AC_CONFIG_HEADERS}, be sure that @file{config.h} is included
-before any system header.  The following preprocessor macros are defined
-where appropriate:
+before any system header.
+
+The following preprocessor macros are defined unconditionally:
 
 @table @code
-@item _GNU_SOURCE
-@cvindex _GNU_SOURCE
-Enable extensions on GNU/Linux.
 @item _ALL_SOURCE
 @cvindex _ALL_SOURCE
-Enable extensions for AIX 3, and for Interix.
+Enable extensions on AIX 3 and Interix.
 @item _DARWIN_C_SOURCE
 @cvindex _DARWIN_C_SOURCE
-Enable extensions for macOS.
-@item _MINIX
-@cvindex _MINIX
-Identify Minix platform.  This particular preprocessor macro is
-obsolescent, and may be removed in a future release of Autoconf.
+Enable extensions on macOS.
+@item _GNU_SOURCE
+@cvindex _GNU_SOURCE
+Enable extensions on GNU systems.
 @item _NETBSD_SOURCE
 @cvindex _NETBSD_SOURCE
-Enable NetBSD-related extensions for Minix.
-@item _POSIX_1_SOURCE
-@cvindex _POSIX_1_SOURCE
-Enable additional Posix functions for Minix.
+Enable general extensions on NetBSD.
+Enable NetBSD compatibility extensions on Minix.
+@item _OPENBSD_SOURCE
+@cvindex _OPENBSD_SOURCE
+Enable OpenBSD compatibility extensions on NetBSD.
+Oddly enough, this does nothing on OpenBSD.
 @item _POSIX_PTHREAD_SEMANTICS
 @cvindex _POSIX_PTHREAD_SEMANTICS
-Enable threading extensions on Solaris.
-@item _POSIX_SOURCE
-@cvindex _POSIX_SOURCE
-Enable Posix functions for Minix.
-@item _TANDEM_SOURCE
-@cvindex _TANDEM_SOURCE
-Enable extensions for the HP NonStop platform.
-@item _XOPEN_SOURCE
-@cvindex _XOPEN_SOURCE
-Enable X/Open extensions for HP-UX.
-@item __EXTENSIONS__
-@cvindex __EXTENSIONS__
-Enable general extensions on Solaris.
+Enable Posix-compatible threading on Solaris.
 @item __STDC_WANT_IEC_60559_ATTRIBS_EXT__
 @cvindex __STDC_WANT_IEC_60559_ATTRIBS_EXT__
 Enable extensions specified by ISO/IEC TS 18661-5:2014.
@@ -8856,6 +8945,38 @@ Enable extensions specified by ISO/IEC TR 24731-2:2010.
 @item __STDC_WANT_MATH_SPEC_FUNCS__
 @cvindex __STDC_WANT_MATH_SPEC_FUNCS__
 Enable extensions specified by ISO/IEC 24747:2009.
+@item _TANDEM_SOURCE
+@cvindex _TANDEM_SOURCE
+Enable extensions on HP NonStop systems.
+@end table
+
+The following preprocessor macros are defined only when necessary;
+they enable access to extensions on some operating systems but
+@emph{disable} extensions on other operating systems.
+
+@table @code
+@item __EXTENSIONS__
+@cvindex __EXTENSIONS__
+Enable general extensions on Solaris.  This macro is defined only if
+the headers included by @code{AC_INCLUDES_DEFAULT}
+(@pxref{Default Includes}) work correctly with it defined.
+
+@item _MINIX
+@itemx _POSIX_SOURCE
+@itemx _POSIX_1_SOURCE
+@cvindex _MINIX
+@cvindex _POSIX_SOURCE
+@cvindex _POSIX_1_SOURCE
+Defined only on MINIX.  @code{_POSIX_SOURCE} and @code{_POSIX_1_SOURCE}
+are needed to enable a number of POSIX features on this OS.
+@code{_MINIX} does not affect the system headers' behavior;
+future versions of Autoconf may stop defining it.
+Programs that need to recognize Minix should use @code{AC_CANONICAL_HOST}.
+
+@item _XOPEN_SOURCE
+@cvindex _XOPEN_SOURCE
+Defined (with value 500) only if needed to make @file{wchar.h} declare
+@code{mbstate_t}.  This is known to be necessary on some versions of HP/UX.
 @end table
 
 @cvindex __STDC_WANT_DEC_FP__
@@ -13970,13 +14091,6 @@ AS_IF([test "x$foo" = xyes], [HANDLE_FOO([yes])],
 @noindent
 ensures any required macros of @code{HANDLE_FOO}
 are expanded before the first test.
-
-The @var{run-if-false} argument should either consist entirely of
-blanks, or expand to a nonempty shell command.  For example,
-@code{AS_IF([:], [:], [[]])} is invalid because its @var{run-if-false}
-argument contains the nonblank characters @code{[]} which expand to
-nothing.  This restriction on @var{run-if-false} also applies to other
-macros with ``if-false'' arguments denoting shell commands.
 
 This macro should be used instead of plain @samp{if} in code
 outside of an @code{AC_DEFUN} macro, when the contents of the @samp{if}
@@ -19168,8 +19282,8 @@ dir=`AS_DIRNAME(["$file"])` # This is more portable.
 @item @command{egrep}
 @c ------------------
 @prindex @command{egrep}
-Posix 1003.1-2001 no longer requires @command{egrep},
-but many hosts do not yet support the Posix
+Although Posix stopped requiring @command{egrep} in 2001,
+a few traditional hosts (notably Solaris) do not support the Posix
 replacement @code{grep -E}.  Also, some traditional implementations do
 not work on long input lines.  To work around these problems, invoke
 @code{AC_PROG_EGREP} and then use @code{$EGREP}.
@@ -19354,8 +19468,8 @@ expr: More than one '\(' was used.
 @item @command{fgrep}
 @c ------------------
 @prindex @command{fgrep}
-Posix 1003.1-2001 no longer requires @command{fgrep},
-but many hosts do not yet support the Posix
+Although Posix stopped requiring @command{fgrep} in 2001,
+a few traditional hosts (notably Solaris) do not support the Posix
 replacement @code{grep -F}.  Also, some traditional implementations do
 not work on long input lines.  To work around these problems, invoke
 @code{AC_PROG_FGREP} and then use @code{$FGREP}.
@@ -19396,7 +19510,7 @@ portable scripts should not combine @option{-c} with @option{-l},
 as Posix does not allow this.
 
 Some of the options required by Posix are not portable in practice.
-Don't use @samp{grep -q} to suppress output, because many @command{grep}
+Don't use @samp{grep -q} to suppress output, because traditional @command{grep}
 implementations (e.g., Solaris) do not support @option{-q}.
 Don't use @samp{grep -s} to suppress output either, because Posix
 says @option{-s} does not suppress output, only some error messages;
@@ -19414,7 +19528,7 @@ Some traditional @command{grep} implementations do not work on long
 input lines.  On AIX the default @code{grep} silently truncates long
 lines on the input before matching.
 
-Also, many implementations do not support multiple regexps
+Also, traditional implementations do not support multiple regexps
 with @option{-e}: they either reject @option{-e} entirely (e.g., Solaris)
 or honor only the last pattern (e.g., IRIX 6.5 and NeXT).  To
 work around these problems, invoke @code{AC_PROG_GREP} and then use
@@ -19659,14 +19773,33 @@ perfectly portable among Posix hosts.
 @c ---------------
 @prindex @command{od}
 
-In Mac OS X 10.3, @command{od} does not support the
+In MacOS X versions prior to 10.4.3, @command{od} does not support the
 standard Posix options @option{-A}, @option{-j}, @option{-N}, or
 @option{-t}, or the XSI option, @option{-s}.  The only
 supported Posix option is @option{-v}, and the only supported
 XSI options are those in @option{-bcdox}.  The BSD
 @command{hexdump} program can be used instead.
 
-This problem no longer exists in Mac OS X 10.4.3.
+In some versions of some operating systems derived from Solaris 11,
+@command{od} prints decimal byte values padded with zeroes rather than
+with spaces:
+
+@smallexample
+$ @kbd{printf '#!' | od -A n -t d1 -N 2}
+         035 033
+@end smallexample
+
+@noindent
+instead of
+
+@smallexample
+$ @kbd{printf '#!' | od -A n -t d1 -N 2}
+          35  33
+@end smallexample
+
+We have observed this on both OpenIndiana and OmniOS;
+Illumos may also be affected.
+As a workaround, you can use octal output (option @code{-t o1}).
 
 
 @item @command{rm}
@@ -22942,8 +23075,8 @@ site- and system-wide initialization files.
 
 @evindex CONFIG_SITE
 If the environment variable @code{CONFIG_SITE} is set, @command{configure}
-uses its value as the name of a shell script to read; it is recommended
-that this be an absolute file name.  Otherwise, it
+uses its value as a space-separated list of shell scripts to read;
+it is recommended that these be absolute file names.  Otherwise, it
 reads the shell script @file{@var{prefix}/share/config.site} if it exists,
 then @file{@var{prefix}/etc/config.site} if it exists.  Thus,
 settings in machine-specific files override those in machine-independent
@@ -25517,6 +25650,41 @@ will still use shell variable expansion (@samp{$}), command substitution
 via @file{atlocal} or @file{atconfig}.
 @end defmac
 
+@defmac AT_PREPARE_TESTS (@var{shell-code})
+@atindex{PREPARE_TESTS}
+Execute @var{shell-code} in the main testsuite process,
+after initializing the test suite and processing command-line options,
+but before running any tests.  If this macro is used several times,
+all of the @var{shell-code}s will be executed,
+in the order they appeared in @file{testsuite.at}.
+
+One reason to use @code{AT_PREPARE_TESTS} is when the programs under
+test are sensitive to environment variables: you can unset all these
+variables or reset them to safe values in @var{shell-code}.
+
+@var{shell-code} is only executed if at least one test is going to be
+run.  In particular, it will not be executed if any of the @option{--help},
+@option{--version}, @option{--list}, or @option{--clean} options are
+given to @command{testsuite} (@pxref{testsuite Invocation}).
+@end defmac
+
+@defmac AT_PREPARE_EACH_TEST (@var{shell-code})
+@atindex{AT_PREPARE_EACH_TEST}
+Execute @var{shell-code} in each test group's subshell, at the point of
+the @code{AT_SETUP} that starts the test group.
+@end defmac
+
+@defmac AT_TEST_HELPER_FN (@var{name}, @var{args}, @var{description}, @var{code})
+Define a shell function that will be available to the code for each test
+group.  Its name will be @code{ath_fn_@var{name}}, and its body will be
+@var{code}.  (The prefix prevents name conflicts with shell functions
+defined by M4sh and Autotest.)
+
+@var{args} should describe the function's arguments and @var{description}
+what it does; these are used only for documentation comments in the
+generated testsuite script.
+@end defmac
+
 @sp 1
 
 @defmac AT_BANNER (@var{test-category-name})
@@ -25639,43 +25807,46 @@ on @var{contents}.
 @atindex{CHECK}
 @atindex{CHECK_UNQUOTED}
 @vrindex at_status
-Execute a test by performing given shell @var{commands} in a subshell.
-@var{commands} is output as-is, so shell expansions are honored.  These
-commands should normally exit with @var{status}, while producing expected
-@var{stdout} and @var{stderr} contents.  If @var{commands} exit with
-unexpected status 77, then the rest of the test group is skipped.  If
-@var{commands} exit with unexpected status 99, then the test group is
-immediately failed.  Otherwise, if this test fails, run shell commands
-@var{run-if-fail} or, if this test passes, run shell commands
-@var{run-if-pass}, both inside the current shell execution environment.
-At the beginning of @var{run-if-fail} and @var{run-if-pass}, the status of
-@var{commands} is available in the @code{at_status} shell variable.
+Perform a test, by running the shell @var{commands} in a subshell.
+@var{commands} is output as-is, so shell expansions are honored.
+These commands are expected to have a final exit status of @var{status},
+and to produce output as described by @var{stdout} and @var{stderr}
+(see below).
 
 This macro must be invoked in between @code{AT_SETUP} and @code{AT_CLEANUP}.
 
-If @var{status} is the literal @samp{ignore}, then the corresponding
-exit status is not checked, except for the special cases of 77 (skip)
+If @var{commands} exit with unexpected status 77, then the rest of the
+test group is skipped.  If @var{commands} exit with unexpected status
+99, then the test group is immediately failed; this is called a
+@emph{hard failure}.  Otherwise, the test is considered to have
+succeeeded if all of the status, stdout, and stderr expectations were
+met.
+
+If @var{run-if-fail} is nonempty, it provides extra shell commands to
+run when the test fails; if @var{run-if-pass} is nonempty, it provides
+extra shell commands to run when the test succeeds.  These commands are
+@emph{not} run in a subshell, and they are not run when the test group
+is skipped (exit code 77) or hard-failed (exit code 99).  They may
+change whether the test group is considered to have succeeded, by
+modifying the shell variable @code{at_failed}; set it to @code{:} to
+indicate that the test group has failed, or @code{false} to indicate
+that it has succeeded.
+
+The exit status of @var{commands} is available to @var{run-if-fail} and
+@var{run-if-pass} commands in the @code{at_status} shell variable.  The
+output from @var{commands} is also available, in the files named by the
+@code{at_stdout} and @code{at_stderr} variables.
+
+If @var{status} is the literal @samp{ignore}, then the exit status of
+@var{commands} is not checked, except for the special cases of 77 (skip)
 and 99 (hard failure).  The existence of hard failures allows one to
 mark a test as an expected failure with @code{AT_XFAIL_IF} because a
 feature has not yet been implemented, but to still distinguish between
-gracefully handling the missing feature and dumping core.  A hard
-failure also inhibits post-test actions in @var{run-if-fail}.
+gracefully handling the missing feature and dumping core.
 
 If the value of the @var{stdout} or @var{stderr} parameter is one of the
 literals in the following table, then the test treats the output
-according to the rules of that literal.  Otherwise, the value of the
-parameter is treated as text that must exactly match the output given by
-@var{commands} on standard output and standard error (including an empty
-parameter for no output); any differences are captured in the testsuite
-log and the test is failed (unless an unexpected exit status of 77
-skipped the test instead).  The difference between @code{AT_CHECK} and
-@code{AT_CHECK_UNQUOTED} is that only the latter performs shell variable
-expansion (@samp{$}), command substitution (@samp{`}), and backslash
-escaping (@samp{\}) on comparison text given in the @var{stdout} and
-@var{stderr} arguments; if the text includes a trailing newline, this
-would be the same as if it were specified via an unquoted
-here-document.  (However, there is no difference in the interpretation
-of @var{commands}).
+according to the rules of that literal.
 
 @table @samp
 @item ignore
@@ -25691,20 +25862,20 @@ files.  If @var{commands} are likely to produce binary output (including
 long lines) or large amounts of output, then logging the output can make
 it harder to locate details related to subsequent tests within the
 group, and could potentially corrupt terminal display of a user running
-@command{testsuite -v}.
+@command{testsuite -v}.  This action is valid for both @var{stdout} and
+@var{stderr}.
 
 @item stdout
-For the @var{stdout} parameter, capture the content of standard output
-to both the file @file{stdout} and the test group log.  Subsequent
-commands in the test group can then post-process the file.  This action
-is often used when it is desired to use @command{grep} to look for a
-substring in the output, or when the output must be post-processed to
-normalize error messages into a common form.
+Only valid as the @var{stdout} parameter.  Capture the content of
+standard output in both a file named @file{stdout} and the test group log.
+Subsequent commands in the test group can then post-process the file.
+This action is often used when it is desired to use @command{grep} to
+look for a substring in the output, or when the output must be
+post-processed to normalize error messages into a common form.
 
 @item stderr
-Like @samp{stdout}, except that it only works for the @var{stderr}
-parameter, and the standard error capture file will be named
-@file{stderr}.
+Only valid as the @var{stderr} parameter.  Capture the content of
+standard error in both a file named @file{stderr} and the test group log.
 
 @item stdout-nolog
 @itemx stderr-nolog
@@ -25715,15 +25886,28 @@ which will be followed by another check that filters down to the
 relevant data, as it makes it easier to locate details in the log.
 
 @item expout
-For the @var{stdout} parameter, compare standard output contents with
+Only valid as the @var{stdout} parameter.  Compare standard output with
 the previously created file @file{expout}, and list any differences in
 the testsuite log.
 
 @item experr
-Like @samp{expout}, except that it only works for the @var{stderr}
-parameter, and the standard error contents are compared with
-@file{experr}.
+Only valid as the @var{stderr} parameter.  Compare standard error with
+the previously created file @file{experr}, and list any differences in
+the testsuite log.
 @end table
+
+Otherwise, the values of the @var{stdout} and @var{stderr} parameters
+are treated as text that must exactly match the output given by
+@var{commands} on standard output and standard error (including an empty
+parameter for no output); any differences are captured in the testsuite
+log and the test is failed (unless an unexpected exit status of 77
+skipped the test instead).
+
+@code{AT_CHECK_UNQUOTED} performs shell variable expansion (@samp{$}),
+command substitution (@samp{`}), and backslash escaping (@samp{\}) on
+comparison text given in the @var{stdout} and @var{stderr} parameters;
+@code{AT_CHECK} does not.  There is no difference in the interpretation
+of @var{commands}.
 @end defmac
 
 @defmac AT_CHECK_EUNIT (@var{module}, @var{test-spec}, @ovar{erlflags}, @

@@ -1,6 +1,6 @@
 #							-*- Autotest -*-
 
-# Copyright (C) 2000-2017, 2020 Free Software Foundation, Inc.
+# Copyright (C) 2000-2017, 2020-2021 Free Software Foundation, Inc.
 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -1463,11 +1463,6 @@ AT_CHECK([[grep '[1-9]\.[0-9]' stdout || exit 77]], [], [ignore])
 # It should understand configure.ac.
 AT_CHECK([[grep '[^0-9]1\.[01234][^0-9]' stdout && exit 77]], [1], [ignore])
 
-# Set CONFIG_SITE to a nonexistent file, so that there are
-# no worries about nonstandard values for 'prefix'.
-CONFIG_SITE=no-such-file
-export CONFIG_SITE
-
 # Prevent aclocal from reading third-party macros, in case they are buggy.
 mkdir empty
 ACLOCAL="aclocal --system-acdir=`cd empty && pwd`"
@@ -2029,12 +2024,15 @@ AT_CLEANUP
 AT_SETUP([Missing auxiliary files (install-sh)])
 AT_KEYWORDS([autoreconf])
 
-# Repeat all the above tests with a configure script that _doesn't_
-# need config.{sub,guess} but does need install-sh.
+# Same as "Missing auxiliary files (config.*)" except that the
+# configure script _doesn't_ need config.{sub,guess} but does need
+# install-sh.
 
-rm build-aux/config.guess
-rm build-aux/config.sub
-rmdir build-aux
+# Prevent autoreconf from running aclocal, which might not exist,
+# or could barf over warnings in third-party macro files.
+AT_DATA([aclocal.m4])
+ACLOCAL=true
+export ACLOCAL
 
 AT_DATA([configure.ac],
 [[AC_INIT([GNU foo], [1.0])
@@ -2043,8 +2041,9 @@ AC_PROG_INSTALL
 AC_OUTPUT
 ]])
 
-
 AT_CHECK_AUTOCONF
+
+# Both configure and autoreconf should detect the missing files.
 AT_CHECK_CONFIGURE([], [1], [ignore],
 [configure: error: cannot find required auxiliary files: install-sh
 ])
@@ -2079,6 +2078,12 @@ AT_KEYWORDS([autoreconf])
 # usage in some automake recipes, but which was broken in autoconf
 # beta 2.69d (see https://savannah.gnu.org/support/?110363).
 
+# Prevent autoreconf from running aclocal, which might not exist,
+# or could barf over warnings in third-party macro files.
+AT_DATA([aclocal.m4])
+ACLOCAL=true
+export ACLOCAL
+
 AT_DATA([configure.ac],
 [[AC_INIT([GNU foo], [1.0])
 AC_CONFIG_AUX_DIR([build-aux])
@@ -2106,6 +2111,74 @@ touch build-aux/tap-driver.sh
 
 AT_CHECK([autoreconf])
 AT_CHECK_CONFIGURE
+
+AT_CLEANUP
+
+
+AT_SETUP([Missing auxiliary files (--force)])
+AT_KEYWORDS([autoreconf])
+
+# Aux files that already exist should not be overwritten, unless
+# --force is used, in which case they *should* be overwritten.
+# Additional wrinkle: in case automake got to the files we install
+# first, we need to *not* overwrite a newer copy supplied by them.
+
+# Prevent autoreconf from running aclocal, which might not exist,
+# or could barf over warnings in third-party macro files.
+AT_DATA([aclocal.m4])
+ACLOCAL=true
+export ACLOCAL
+
+AT_DATA([configure.ac],
+[[AC_INIT([GNU foo], [1.0])
+AC_CONFIG_AUX_DIR([build-aux])
+AC_PROG_INSTALL
+AC_CANONICAL_HOST
+AC_OUTPUT
+]])
+
+mkdir build-aux
+
+AT_DATA([build-aux/config-guess.old],
+[[#! /bin/sh
+timestamp='1970-01-01'
+printf '%s\n' 'frobozz-bogon-bogos1'
+]])
+
+AT_DATA([build-aux/config-sub.new],
+[[#! /bin/sh
+scriptversion='9999-12-31'
+printf '%s\n' "$*"
+]])
+
+AT_DATA([build-aux/install-sh.old],
+[[#! /bin/sh
+# Old versions of install-sh did not have a timestamp line.
+]])
+
+cp build-aux/config-guess.old build-aux/config.guess
+cp build-aux/config-sub.new build-aux/config.sub
+cp build-aux/install-sh.old build-aux/install-sh
+chmod +x build-aux/config.sub build-aux/config.guess build-aux/install-sh
+
+# This pass should not change any of the files.
+AT_CHECK([autoreconf --install])
+AT_CMP([build-aux/config-guess.old], [build-aux/config.guess])
+AT_CMP([build-aux/config-sub.new], [build-aux/config.sub])
+AT_CMP([build-aux/install-sh.old], [build-aux/install-sh])
+
+# This pass should change only config.guess and install-sh, not config.sub.
+AT_CHECK([autoreconf --install --force])
+AT_CHECK(
+  [if cmp build-aux/config-guess.old build-aux/config.guess > /dev/null 2>&1
+  then exit 1
+  fi])
+AT_CMP([build-aux/config-sub.new], [build-aux/config.sub])
+AT_CHECK(
+  [if cmp build-aux/install-sh.old build-aux/install-sh > /dev/null 2>&1
+  then exit 1
+  fi])
+
 
 AT_CLEANUP
 

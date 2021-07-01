@@ -1,6 +1,6 @@
 ## Make Autoconf tests.
 
-# Copyright (C) 2000-2017, 2020 Free Software Foundation, Inc.
+# Copyright (C) 2000-2017, 2020-2021 Free Software Foundation, Inc.
 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -21,7 +21,7 @@
 # project, remember to distribute both testsuite and package.m4.
 EXTRA_DIST += \
   tests/local.at \
-  tests/mktests.sh \
+  tests/mktests.pl \
   tests/atlocal.in \
   tests/wrapper.as \
   tests/statesave.m4
@@ -120,8 +120,13 @@ TESTSUITE_HAND_AT = \
   tests/autoscan.at \
   tests/foreign.at
 
+TESTSUITE_EXTRA = \
+  tests/data/ax_prog_cc_for_build_v18.m4 \
+  tests/data/ax_prog_cxx_for_build_v3.m4 \
+  tests/data/gnulib_std_gnu11_2020_08_17.m4
+
 CLEANFILES += $(TESTSUITE_GENERATED_AT)
-EXTRA_DIST += $(TESTSUITE_HAND_AT)
+EXTRA_DIST += $(TESTSUITE_HAND_AT) $(TESTSUITE_EXTRA)
 
 TESTSUITE_AT = $(TESTSUITE_GENERATED_AT) $(TESTSUITE_HAND_AT)
 TESTSUITE = tests/testsuite
@@ -159,6 +164,11 @@ clean-local:
 
 check-local: tests/atconfig tests/atlocal $(TESTSUITE)
 	+$(run_testsuite) $(TESTSUITEFLAGS)
+
+# Automake doesn't know how to regenerate this file because
+# it's created via AC_CONFIG_COMMANDS.
+tests/atconfig: $(top_builddir)/config.status
+	cd $(top_builddir) && $(SHELL) ./config.status $@
 
 # Run the test suite on the *installed* tree.
 installcheck-local: tests/atconfig tests/atlocal $(TESTSUITE)
@@ -200,20 +210,20 @@ $(TESTSUITE_GENERATED_AT): tests/mktests.stamp
 	  $(MAKE) $(AM_MAKEFLAGS) tests/mktests.stamp; \
 	fi
 
-tests/mktests.stamp : tests/mktests.sh $(AUTOCONF_FILES)
+tests/mktests.stamp : tests/mktests.pl $(AUTOCONF_FILES)
 	@rm -f tests/mktests.tmp
 	@touch tests/mktests.tmp
-	$(SHELL) $(srcdir)/tests/mktests.sh $(AUTOCONF_FILES)
+	$(PERL) $(srcdir)/tests/mktests.pl tests $(AUTOCONF_FILES)
 	@mv -f tests/mktests.tmp $@
 
 CLEANFILES += tests/mktests.tmp tests/mktests.stamp
 
 ## maintainer-check ##
 
-# These cannot be run in parallel.
+# The test suite cannot be run in parallel with itself.
 maintainer-check:
+	$(MAKE) $(AM_MAKEFLAGS) check
 	$(MAKE) $(AM_MAKEFLAGS) maintainer-check-posix
-	$(MAKE) $(AM_MAKEFLAGS) maintainer-check-c++
 
 # The hairy heredoc is more robust than using echo.
 CLEANFILES += expr
@@ -234,7 +244,3 @@ expr:
 maintainer-check-posix: expr
 	POSIXLY_CORRECT=yes $(MAKE) $(AM_MAKEFLAGS) check
 	rm expr
-
-# Try using G++ as a C compiler.
-maintainer-check-c++:
-	CC=g++ $(MAKE) $(AM_MAKEFLAGS) check

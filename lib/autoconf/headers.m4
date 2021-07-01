@@ -1,8 +1,8 @@
 # This file is part of Autoconf.			-*- Autoconf -*-
 # Checking for headers.
 #
-# Copyright (C) 1988, 1999-2004, 2006, 2008-2017, 2020 Free Software
-# Foundation, Inc.
+# Copyright (C) 1988, 1999-2004, 2006, 2008-2017, 2020-2021 Free
+# Software Foundation, Inc.
 
 # This file is part of Autoconf.  This program is free
 # software; you can redistribute it and/or modify it under the
@@ -293,17 +293,14 @@ dnl If ever you change this variable, please keep autoconf.texi in sync.
 [# Factoring default headers for most tests.
 ac_includes_default="\
 #include <stddef.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#ifdef HAVE_SYS_TYPES_H
-# include <sys/types.h>
+#ifdef HAVE_STDIO_H
+# include <stdio.h>
 #endif
-#ifdef HAVE_SYS_STAT_H
-# include <sys/stat.h>
+#ifdef HAVE_STDLIB_H
+# include <stdlib.h>
 #endif
-#ifdef HAVE_STRINGS_H
-# include <strings.h>
+#ifdef HAVE_STRING_H
+# include <string.h>
 #endif
 #ifdef HAVE_INTTYPES_H
 # include <inttypes.h>
@@ -311,24 +308,30 @@ ac_includes_default="\
 #ifdef HAVE_STDINT_H
 # include <stdint.h>
 #endif
+#ifdef HAVE_STRINGS_H
+# include <strings.h>
+#endif
+#ifdef HAVE_SYS_TYPES_H
+# include <sys/types.h>
+#endif
+#ifdef HAVE_SYS_STAT_H
+# include <sys/stat.h>
+#endif
 #ifdef HAVE_UNISTD_H
 # include <unistd.h>
 #endif"
 ])]dnl
-[m4_map_args([_AC_CHECK_HEADER_ONCE],
-  [sys/types.h], [sys/stat.h], [strings.h],
-  [inttypes.h], [stdint.h], [unistd.h])]dnl
-dnl For backward compatibility, provide unconditional AC_DEFINEs of
-dnl HAVE_STDLIB_H, HAVE_STRING_H, and STDC_HEADERS.
-[AC_DEFINE([HAVE_STDLIB_H], [1],
-  [Always define to 1, for backward compatibility.
-   You can assume <stdlib.h> exists.])]dnl
-[AC_DEFINE([HAVE_STRING_H], [1],
-  [Always define to 1, for backward compatibility.
-   You can assume <string.h> exists.])]dnl
+[dnl We have to check for all the headers that aren't part of the
+dnl C-1990 *freestanding* environment, which is all of them except stddef.h.
+m4_map_args([_AC_CHECK_HEADER_ONCE],
+  [stdio.h], [stdlib.h], [string.h], [inttypes.h], [stdint.h],
+  [strings.h], [sys/stat.h], [sys/types.h], [unistd.h])]dnl
+[AS_IF([test $ac_cv_header_stdlib_h = yes && test $ac_cv_header_string_h = yes],
 [AC_DEFINE([STDC_HEADERS], [1],
-  [Always define to 1, for backward compatibility.
-   You can assume the C90 standard headers exist.])])
+  [Define to 1 if all of the C90 standard headers exist
+   (not just the ones required in a freestanding environment).
+   This macro is provided for backward compatibility;
+   new code need not use it.])])])
 # AC_CHECK_INCLUDES_DEFAULT
 
 
@@ -496,13 +499,13 @@ AN_FUNCTION([minor],     [AC_HEADER_MAJOR])
 AN_HEADER([sys/mkdev.h], [AC_HEADER_MAJOR])
 AC_DEFUN([AC_HEADER_MAJOR],
 [AC_CHECK_HEADERS_ONCE([sys/types.h])
-AC_CHECK_HEADER(sys/mkdev.h,
-		[AC_DEFINE(MAJOR_IN_MKDEV, 1,
+AC_CHECK_HEADER([sys/mkdev.h],
+		[AC_DEFINE([MAJOR_IN_MKDEV], [1],
 			   [Define to 1 if `major', `minor', and `makedev' are
 			    declared in <mkdev.h>.])])
 if test $ac_cv_header_sys_mkdev_h = no; then
-  AC_CHECK_HEADER(sys/sysmacros.h,
-		  [AC_DEFINE(MAJOR_IN_SYSMACROS, 1,
+  AC_CHECK_HEADER([sys/sysmacros.h],
+		  [AC_DEFINE([MAJOR_IN_SYSMACROS], [1],
 			     [Define to 1 if `major', `minor', and `makedev'
 			      are declared in <sysmacros.h>.])])
 fi
@@ -574,70 +577,114 @@ AN_IDENTIFIER([bool], [AC_CHECK_HEADER_STDBOOL])
 AN_IDENTIFIER([true], [AC_CHECK_HEADER_STDBOOL])
 AN_IDENTIFIER([false],[AC_CHECK_HEADER_STDBOOL])
 AC_DEFUN([AC_CHECK_HEADER_STDBOOL],
-  [AC_CACHE_CHECK([for stdbool.h that conforms to C99],
+  [AC_CHECK_TYPES([_Bool])
+   AC_CACHE_CHECK([for stdbool.h that conforms to C99],
      [ac_cv_header_stdbool_h],
      [AC_COMPILE_IFELSE(
         [AC_LANG_PROGRAM(
-           [[
-             #include <stdbool.h>
-
-             #if __cplusplus < 201103
-              #ifndef bool
-               "error: bool is not defined"
-              #endif
-              #ifndef false
-               "error: false is not defined"
-              #endif
-              #if false
-               "error: false is not 0"
-              #endif
-              #ifndef true
-               "error: true is not defined"
-              #endif
-              #if true != 1
-               "error: true is not 1"
-              #endif
-             #endif
+           [[#include <stdbool.h>
 
              #ifndef __bool_true_false_are_defined
-              "error: __bool_true_false_are_defined is not defined"
+               #error "__bool_true_false_are_defined is not defined"
              #endif
+             char a[__bool_true_false_are_defined == 1 ? 1 : -1];
 
-             struct s { _Bool s: 1; _Bool t; } s;
+             /* Regardless of whether this is C++ or "_Bool" is a
+                valid type name, "true" and "false" should be usable
+                in #if expressions and integer constant expressions,
+                and "bool" should be a valid type name.  */
 
-             char a[true == 1 ? 1 : -1];
-             char b[false == 0 ? 1 : -1];
-             char c[__bool_true_false_are_defined == 1 ? 1 : -1];
-             char d[(bool) 0.5 == true ? 1 : -1];
-             /* See body of main program for 'e'.  */
-             char f[(_Bool) 0.0 == false ? 1 : -1];
-             char g[true];
-             char h[sizeof (_Bool)];
-             char i[sizeof s.t];
-             enum { j = false, k = true, l = false * true, m = true * 256 };
+             #if !true
+               #error "'true' is not true"
+             #endif
+             #if true != 1
+               #error "'true' is not equal to 1"
+             #endif
+             char b[true == 1 ? 1 : -1];
+             char c[true];
+
+             #if false
+               #error "'false' is not false"
+             #endif
+             #if false != 0
+               #error "'false' is not equal to 0"
+             #endif
+             char d[false == 0 ? 1 : -1];
+
+             enum { e = false, f = true, g = false * true, h = true * 256 };
+
+             char i[(bool) 0.5 == true ? 1 : -1];
+             char j[(bool) 0.0 == false ? 1 : -1];
+             char k[sizeof (bool) > 0 ? 1 : -1];
+
+             struct sb { bool s: 1; bool t; } s;
+             char l[sizeof s.t > 0 ? 1 : -1];
+
              /* The following fails for
                 HP aC++/ANSI C B3910B A.05.55 [Dec 04 2003]. */
-             _Bool n[m];
-             char o[sizeof n == m * sizeof n[0] ? 1 : -1];
-             char p[-1 - (_Bool) 0 < 0 && -1 - (bool) 0 < 0 ? 1 : -1];
+             bool m[h];
+             char n[sizeof m == h * sizeof m[0] ? 1 : -1];
+             char o[-1 - (bool) 0 < 0 ? 1 : -1];
              /* Catch a bug in an HP-UX C compiler.  See
-                https://gcc.gnu.org/ml/gcc-patches/2003-12/msg02303.html
-                https://lists.gnu.org/archive/html/bug-coreutils/2005-11/msg00161.html
+         https://gcc.gnu.org/ml/gcc-patches/2003-12/msg02303.html
+         https://lists.gnu.org/archive/html/bug-coreutils/2005-11/msg00161.html
               */
-             _Bool q = true;
-             _Bool *pq = &q;
+             bool p = true;
+             bool *pp = &p;
+
+             /* C 1999 specifies that bool, true, and false are to be
+                macros, but C++ 2011 and later overrule this.  */
+             #if __cplusplus < 201103
+              #ifndef bool
+               #error "bool is not defined"
+              #endif
+              #ifndef false
+               #error "false is not defined"
+              #endif
+              #ifndef true
+               #error "true is not defined"
+              #endif
+             #endif
+
+             /* If _Bool is available, repeat with it all the tests
+                above that used bool.  */
+             #ifdef HAVE__BOOL
+               struct sB { _Bool s: 1; _Bool t; } t;
+
+               char q[(_Bool) 0.5 == true ? 1 : -1];
+               char r[(_Bool) 0.0 == false ? 1 : -1];
+               char u[sizeof (_Bool) > 0 ? 1 : -1];
+               char v[sizeof t.t > 0 ? 1 : -1];
+
+               _Bool w[h];
+               char x[sizeof m == h * sizeof m[0] ? 1 : -1];
+               char y[-1 - (_Bool) 0 < 0 ? 1 : -1];
+               _Bool z = true;
+               _Bool *pz = &p;
+             #endif
            ]],
            [[
-             bool e = &s;
-             *pq |= q;
-             *pq |= ! q;
-             /* Refer to every declared value, to avoid compiler optimizations.  */
-             return (!a + !b + !c + !d + !e + !f + !g + !h + !i + !!j + !k + !!l
-                     + !m + !n + !o + !p + !q + !pq);
+             bool ps = &s;
+             *pp |= p;
+             *pp |= ! p;
+
+             #ifdef HAVE__BOOL
+               _Bool pt = &t;
+               *pz |= z;
+               *pz |= ! z;
+             #endif
+
+             /* Refer to every declared value, so they cannot be
+                discarded as unused.  */
+             return (!a + !b + !c + !d + !e + !f + !g + !h + !i + !j + !k
+                     + !l + !m + !n + !o + !p + !pp + !ps
+             #ifdef HAVE__BOOL
+                     + !q + !r + !u + !v + !w + !x + !y + !z + !pt
+             #endif
+                    );
            ]])],
         [ac_cv_header_stdbool_h=yes],
         [ac_cv_header_stdbool_h=no])])
-   AC_CHECK_TYPES([_Bool])
 ])# AC_CHECK_HEADER_STDBOOL
 
 

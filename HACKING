@@ -18,8 +18,8 @@ If a change fixes a test, mention the test in the ChangeLog entry.
 To this end, the Autotest-mode is handy.
 
 ** Bug reports
-If somebody reports a new bug, mention his name in the ChangeLog entry
-and in the test case you write.  Put him into THANKS.
+If somebody reports a new bug, mention their name in the ChangeLog
+entry and in the test case you write.  Put them into THANKS.
 
 The correct response to most actual bugs is to write a new test case
 which demonstrates the bug.  Then fix the bug, re-run the test suite,
@@ -53,10 +53,7 @@ release:
   The checks live in maint.mk, shared from gnulib, and customized in
   cfg.mk.
 
-- Run `make distcheck'
-
-- Test some unusual environments, such as building and running the
-  testsuite with POSIXLY_CORRECT=1 CC=g++.
+- Run `make distcheck' and `make maintainer-check'.
 
 - Try some real world packages
   A good example is the coreutils package.
@@ -158,7 +155,7 @@ that needs to be updated.
 
 -----
 
-Copyright (C) 2002, 2008-2017, 2020 Free Software Foundation, Inc.
+Copyright (C) 2002, 2008-2017, 2020-2021 Free Software Foundation, Inc.
 
 Copying and distribution of this file, with or without modification,
 are permitted in any medium without royalty provided the copyright

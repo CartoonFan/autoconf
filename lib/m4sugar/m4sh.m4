@@ -2,7 +2,7 @@
 # M4 sugar for common shell constructs.
 # Requires GNU M4 and M4sugar.
 #
-# Copyright (C) 2000-2017, 2020 Free Software Foundation, Inc.
+# Copyright (C) 2000-2017, 2020-2021 Free Software Foundation, Inc.
 
 # This file is part of Autoconf.  This program is free
 # software; you can redistribute it and/or modify it under the
@@ -98,9 +98,10 @@ _$0
 # _AS_BOURNE_COMPATIBLE
 # ---------------------
 # This is the part of AS_BOURNE_COMPATIBLE which has to be repeated inside
-# each instance.
+# each instance.  See _AS_EMPTY_ELSE_PREPARE for explanation of as_nop.
 m4_define([_AS_BOURNE_COMPATIBLE],
-[AS_IF([test ${ZSH_VERSION+y} && (emulate sh) >/dev/null 2>&1],
+[as_nop=:
+AS_IF([test ${ZSH_VERSION+y} && (emulate sh) >/dev/null 2>&1],
  [emulate sh
   NULLCMD=:
   [#] Pre-4.2 versions of Zsh do word splitting on ${1+"$[@]"}, which
@@ -351,7 +352,8 @@ m4_defun([_AS_PREPARE],
 [m4_pushdef([AS_MESSAGE_LOG_FD], [-1])]dnl
 [_AS_ERROR_PREPARE
 _m4_popdef([AS_MESSAGE_LOG_FD])]dnl
-[_AS_EXIT_PREPARE
+[_AS_EMPTY_ELSE_PREPARE
+_AS_EXIT_PREPARE
 _AS_UNSET_PREPARE
 _AS_VAR_APPEND_PREPARE
 _AS_VAR_ARITH_PREPARE
@@ -387,6 +389,7 @@ AS_REQUIRE([_AS_CR_PREPARE])
 AS_REQUIRE([_AS_LINENO_PREPARE])
 AS_REQUIRE([_AS_ECHO_N_PREPARE])
 AS_REQUIRE([_AS_EXIT_PREPARE])
+AS_REQUIRE([_AS_EMPTY_ELSE_PREPARE])
 AS_REQUIRE([_AS_LN_S_PREPARE])
 AS_REQUIRE([_AS_MKDIR_P_PREPARE])
 AS_REQUIRE([_AS_TEST_PREPARE])
@@ -468,6 +471,15 @@ AS_IF([( set x; as_fn_ret_success y && test x = "[$]1" )], [],
 test x$exitcode = x0[]])# _AS_SHELL_FN_WORK
 
 
+# _AS_MODERN_CMDSUBST_WORKS
+# -------------------------
+# This is a spy to detect "in the wild" shells that do not support
+# the newer $(...) form of command substitutions.
+m4_define([_AS_MODERN_CMDSUBST_WORKS],
+[blah=$(echo $(echo blah))
+test x"$blah" = xblah])
+
+
 # _AS_SHELL_SANITIZE
 # ------------------
 # This is the prolog that is emitted by AS_INIT and AS_INIT_GENERATED;
@@ -544,6 +556,7 @@ m4_define([AS_SHELL_SANITIZE],
 m4_provide_if([AS_INIT], [],
 [m4_provide([AS_INIT])
 _AS_DETECT_REQUIRED([_AS_SHELL_FN_WORK])
+_AS_DETECT_REQUIRED([_AS_MODERN_CMDSUBST_WORKS])
 _AS_DETECT_REQUIRED([_AS_TEST_X_WORKS])
 _AS_DETECT_BETTER_SHELL
 _AS_UNSET_PREPARE
@@ -659,14 +672,27 @@ done[]_m4_popdef([$1])])
 # | fi
 # with simplifications when IF-TRUE1 and/or IF-FALSE are empty.
 #
+# Note: IF-TRUEn and IF_FALSE may be nonempty but, after further macro
+# expansion, leave no actual shell code.  We can't detect this, so we
+# include a no-op statement in each clause to prevent it becoming a shell
+# syntax error.  For the IF-TRUEn this can simply be `:' at the beginning of
+# the clause.  IF-FALSE is harder because it must preserve the value of $?
+# from the conditional expression.  The most practical way to do this is
+# with a shell function whose body is `return $?' but AS_IF is used before
+# it's safe to use shell functions.  To deal with *that*, there is a shell
+# variable $as_fn_nop that expands to `:' before the nop shell function is
+# defined, and invokes the nop shell function afterward.  Early uses of
+# AS_IF (which are all under our control) must not use the value of $? from
+# the conditional expression in an else clause.
 m4_define([_AS_IF],
 [elif $1
 then :
   $2
 ])
-m4_define([_AS_IF_ELSE],
+m4_defun([_AS_IF_ELSE],
 [m4_ifnblank([$1],
-[else
+[m4_append_uniq([_AS_CLEANUP], [AS_REQUIRE([_AS_EMPTY_ELSE_PREPARE])])]dnl
+[else $as_nop
   $1
 ])])
 
@@ -676,6 +702,16 @@ then :
   $2
 m4_map_args_pair([_$0], [_$0_ELSE], m4_shift2($@))]dnl
 [fi[]])# AS_IF
+
+m4_defun([_AS_EMPTY_ELSE_PREPARE],
+[m4_divert_text([M4SH-INIT-FN],
+[AS_FUNCTION_DESCRIBE([as_fn_nop], [],
+  [Do nothing but, unlike ":", preserve the value of $][?.])
+as_fn_nop ()
+{
+  return $[]?
+}
+as_nop=as_fn_nop])])
 
 
 # AS_SET_STATUS(STATUS)
@@ -695,7 +731,8 @@ as_fn_unset ()
 {
   AS_UNSET([$[1]])
 }
-as_unset=as_fn_unset])
+as_unset=as_fn_unset
+])
 
 
 # AS_UNSET(VAR)
@@ -860,8 +897,11 @@ esac
 # the shell variables $as_echo and $as_echo_n.  New code should use
 # AS_ECHO(["message"]) and AS_ECHO_N(["message"]), respectively.
 dnl The @&t@ prevents a spurious deprecation diagnostic.
-as_@&t@echo='printf %s\n'
-as_@&t@echo_n='printf %s'
+dnl Extra quoting in case `s' or `n' are user-defined macros when this
+dnl is expanded; they almost certainly aren't meant to be used here.
+dnl See bug 110377.
+as_@&t@echo='printf [%s\n]'
+as_@&t@echo_n='printf [%s]'
 ])# _AS_ECHO_N_PREPARE
 
 
@@ -1069,7 +1109,10 @@ fi
 # (typically a quoted string).  The bytes of WORD are output as-is, even
 # if it starts with "-" or contains "\".
 m4_define([AS_ECHO],
-[printf "%s\n" $1])
+dnl Extra quoting in case `s' or `n' are user-defined macros when this
+dnl is expanded; they almost certainly aren't meant to be used here.
+dnl See bug 110377.
+[printf "[%s\n]" $1])
 
 # Deprecation warning for the former internal shell variable $as_echo.
 m4_define([as_echo],
@@ -1081,7 +1124,10 @@ m4_define([as_echo],
 # ---------------
 # Like AS_ECHO(WORD), except do not output the trailing newline.
 m4_define([AS_ECHO_N],
-[printf %s $1])
+dnl Extra quoting in case `s' is a user-defined macro when this
+dnl is expanded; it almost certainly isn't meant to be used here.
+dnl See bug 110377.
+[printf [%s] $1])
 
 # Deprecation warning for the former internal shell variable $as_echo_n.
 m4_define([as_echo_n],
@@ -2177,6 +2223,7 @@ m4_divert_text([M4SH-INIT-FN], [m4_text_box([M4sh Shell Functions.])])
 m4_divert([BODY])dnl
 m4_text_box([Main body of script.])
 _AS_DETECT_REQUIRED([_AS_SHELL_FN_WORK])dnl
+_AS_DETECT_REQUIRED([_AS_MODERN_CMDSUBST_WORKS])dnl
 _AS_DETECT_REQUIRED([_AS_TEST_X_WORKS])dnl
 AS_REQUIRE([_AS_UNSET_PREPARE], [], [M4SH-INIT-FN])dnl
 ])

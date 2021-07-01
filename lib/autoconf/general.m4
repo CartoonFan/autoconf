@@ -1,7 +1,8 @@
 # This file is part of Autoconf.                       -*- Autoconf -*-
 # Parameterized macros.
 m4_define([_AC_COPYRIGHT_YEARS], [
-Copyright (C) 1992-1996, 1998-2017, 2020 Free Software Foundation, Inc.
+Copyright (C) 1992-1996, 1998-2017, 2020-2021 Free Software Foundation,
+Inc.
 ])
 
 # This file is part of Autoconf.  This program is free
@@ -230,56 +231,49 @@ m4_define([_AC_INIT_LITERAL],
 
 # _AC_INIT_PACKAGE(PACKAGE-NAME, VERSION, BUG-REPORT, [TARNAME], [URL])
 # ---------------------------------------------------------------------
+# Set the values of AC_PACKAGE_{NAME,VERSION,STRING,BUGREPORT,TARNAME,URL}
+# from the arguments.
 m4_define([_AC_INIT_PACKAGE],
-[m4_pushdef([_ac_init_NAME],     m4_normalize([$1]))
-m4_pushdef([_ac_init_VERSION],   m4_normalize([$2]))
-m4_pushdef([_ac_init_BUGREPORT], m4_normalize([$3]))
-m4_pushdef([_ac_init_TARNAME],   m4_normalize([$4]))
-m4_pushdef([_ac_init_URL],       m4_normalize([$5]))
-# NAME, VERSION, BUGREPORT, and URL should all be safe for use in shell
-# strings of all kinds.
-_AC_INIT_LITERAL(m4_defn([_ac_init_NAME]))
-_AC_INIT_LITERAL(m4_defn([_ac_init_VERSION]))
-_AC_INIT_LITERAL(m4_defn([_ac_init_BUGREPORT]))
-_AC_INIT_LITERAL(m4_defn([_ac_init_URL]))
+[_AC_INIT_PACKAGE_N(m4_normalize([$1]), m4_normalize([$2]), m4_normalize([$3]),
+                    m4_normalize([$4]), m4_normalize([$5]))])
+
+# _AC_INIT_PACKAGE_N(PACKAGE-NAME, VERSION, BUG-REPORT, [TARNAME], [URL])
+# -----------------------------------------------------------------------
+# Subroutine of _AC_INIT_PACKAGE.
+m4_define([_AC_INIT_PACKAGE_N],
+[# PACKAGE-NAME, VERSION, BUGREPORT, and URL should all be safe for use
+# in shell strings of all kinds.
+_AC_INIT_LITERAL([$1])
+_AC_INIT_LITERAL([$2])
+_AC_INIT_LITERAL([$3])
+_AC_INIT_LITERAL([$5])
+
 # TARNAME is even more constrained: it should not contain any shell
 # metacharacters or whitespace, because it is used to construct
 # filenames.
-AS_LITERAL_WORD_IF(m4_defn([_ac_init_TARNAME]), [],
+AS_LITERAL_WORD_IF([$4], [],
   [m4_warn([syntax],
-	   [AC_INIT: unsafe as a filename: "]m4_defn([_ac_init_TARNAME])["])])
-#
-# These do not use m4_copy because we don't want to copy the pushdef stack.
-m4_ifndef([AC_PACKAGE_NAME],
-	  [m4_define([AC_PACKAGE_NAME],
-		     m4_defn([_ac_init_NAME]))])
-m4_ifndef([AC_PACKAGE_VERSION],
-	  [m4_define([AC_PACKAGE_VERSION],
-		     m4_defn([_ac_init_VERSION]))])
-m4_ifndef([AC_PACKAGE_STRING],
-	  [m4_define([AC_PACKAGE_STRING],
-		     m4_defn([_ac_init_NAME])[ ]m4_defn([_ac_init_VERSION]))])
-m4_ifndef([AC_PACKAGE_BUGREPORT],
-	  [m4_define([AC_PACKAGE_BUGREPORT], _ac_init_BUGREPORT)])
-m4_ifndef([AC_PACKAGE_TARNAME],
-	  [m4_define([AC_PACKAGE_TARNAME],
-		     m4_default(m4_defn([_ac_init_TARNAME]),
-				[m4_bpatsubst(m4_tolower(
-				 m4_bpatsubst(m4_defn([_ac_init_NAME]),
-					      [GNU ])),
-				 [[^_abcdefghijklmnopqrstuvwxyz0123456789]],
-				 [-])]))])
-m4_ifndef([AC_PACKAGE_URL],
-	  [m4_define([AC_PACKAGE_URL],
-		     m4_default(m4_defn([_ac_init_URL]),
-				[m4_if(m4_index(m4_defn([_ac_init_NAME]),
-						[GNU ]), [0],
-    [[https://www.gnu.org/software/]m4_defn([AC_PACKAGE_TARNAME])[/]])]))])
-m4_popdef([_ac_init_NAME])
-m4_popdef([_ac_init_VERSION])
-m4_popdef([_ac_init_BUGREPORT])
-m4_popdef([_ac_init_TARNAME])
-m4_popdef([_ac_init_URL])
+	   [AC_INIT: unsafe as a filename: "$4"])])
+
+m4_define_default([AC_PACKAGE_NAME],      [$1])
+m4_define_default([AC_PACKAGE_VERSION],   [$2])
+
+# The m4_strip makes AC_PACKAGE_STRING be [], not [ ], when
+# both $1 and $2 are empty.
+m4_define_default([AC_PACKAGE_STRING],    m4_strip([$1 $2]))
+m4_define_default([AC_PACKAGE_BUGREPORT], [$3])
+
+# N.B. m4_ifnblank strips one layer of quotation from whichever of its
+# second and third argument it evaluates to.
+m4_define_default([AC_PACKAGE_TARNAME],
+  m4_ifnblank([$4], [[$4]],
+    [m4_quote(m4_bpatsubst(m4_tolower(m4_bpatsubst([$1], [^GNU ], [])),
+      [[^_abcdefghijklmnopqrstuvwxyz0123456789]], [-]))]))
+m4_define_default([AC_PACKAGE_URL],
+  m4_ifnblank([$5], [[$5]],
+    [m4_if(m4_index([$1], [GNU ]), [0],
+      [[https://www.gnu.org/software/]m4_defn([AC_PACKAGE_TARNAME])[/]],
+      [])]))
 ])
 
 
@@ -1445,7 +1439,7 @@ m4_define([_AS_FORCE_REEXEC_WITH_CONFIG_SHELL], [yes])
 AS_INIT[]dnl
 AS_PREPARE[]dnl
 m4_divert_push([KILL])
-m4_ifval([$2], [_AC_INIT_PACKAGE($@)])
+m4_ifval([$2], [_AC_INIT_PACKAGE($@)], [_AC_INIT_PACKAGE()])
 _AC_INIT_DEFAULTS
 _AC_INIT_PARSE_ARGS
 _AC_INIT_DIRCHECK
@@ -2105,26 +2099,20 @@ AU_DEFUN([AC_VALIDATE_CACHED_SYSTEM_TUPLE], [])
 # Look for site- or system-specific initialization scripts.
 m4_define([AC_SITE_LOAD],
 [# Prefer an explicitly selected file to automatically selected ones.
-ac_site_file1=NONE
-ac_site_file2=NONE
 if test -n "$CONFIG_SITE"; then
-  # We do not want a PATH search for config.site.
-  case $CONFIG_SITE in @%:@((
-    -*)  ac_site_file1=./$CONFIG_SITE;;
-    */*) ac_site_file1=$CONFIG_SITE;;
-    *)   ac_site_file1=./$CONFIG_SITE;;
-  esac
+  ac_site_files="$CONFIG_SITE"
 elif test "x$prefix" != xNONE; then
-  ac_site_file1=$prefix/share/config.site
-  ac_site_file2=$prefix/etc/config.site
+  ac_site_files="$prefix/share/config.site $prefix/etc/config.site"
 else
-  ac_site_file1=$ac_default_prefix/share/config.site
-  ac_site_file2=$ac_default_prefix/etc/config.site
+  ac_site_files="$ac_default_prefix/share/config.site $ac_default_prefix/etc/config.site"
 fi
-for ac_site_file in "$ac_site_file1" "$ac_site_file2"
+
+for ac_site_file in $ac_site_files
 do
-  test "x$ac_site_file" = xNONE && continue
-  if test /dev/null != "$ac_site_file" && test -r "$ac_site_file"; then
+  AS_CASE([$ac_site_file],
+    [*/*], [],
+    [ac_site_file=./$ac_site_file])
+  if test -f "$ac_site_file" && test -r "$ac_site_file"; then
     AC_MSG_NOTICE([loading site script $ac_site_file])
     sed 's/^/| /' "$ac_site_file" >&AS_MESSAGE_LOG_FD
     . "$ac_site_file" \
@@ -2815,7 +2803,7 @@ AC_DEFUN([AC_EGREP_HEADER],
 # Shell function body for _AC_COMPILE_IFELSE.
 m4_define([_AC_COMPILE_IFELSE_BODY],
 [  AS_LINENO_PUSH([$[]1])
-  rm -f conftest.$ac_objext
+  rm -f conftest.$ac_objext conftest.beam
   AS_IF([_AC_DO_STDERR($ac_compile) && {
 	 test -z "$ac_[]_AC_LANG_ABBREV[]_werror_flag" ||
 	 test ! -s conftest.err
@@ -2839,7 +2827,7 @@ AC_DEFUN([_AC_COMPILE_IFELSE],
   [$0_BODY])]dnl
 [m4_ifvaln([$1], [AC_LANG_CONFTEST([$1])])]dnl
 [AS_IF([ac_fn_[]_AC_LANG_ABBREV[]_try_compile "$LINENO"], [$2], [$3])
-rm -f core conftest.err conftest.$ac_objext[]m4_ifval([$1], [ conftest.$ac_ext])[]dnl
+rm -f core conftest.err conftest.$ac_objext conftest.beam[]m4_ifval([$1], [ conftest.$ac_ext])[]dnl
 ])# _AC_COMPILE_IFELSE
 
 
@@ -2871,7 +2859,7 @@ AU_DEFUN([AC_TRY_COMPILE],
 # Shell function body for _AC_LINK_IFELSE.
 m4_define([_AC_LINK_IFELSE_BODY],
 [  AS_LINENO_PUSH([$[]1])
-  rm -f conftest.$ac_objext conftest$ac_exeext
+  rm -f conftest.$ac_objext conftest.beam conftest$ac_exeext
   AS_IF([_AC_DO_STDERR($ac_link) && {
 	 test -z "$ac_[]_AC_LANG_ABBREV[]_werror_flag" ||
 	 test ! -s conftest.err
@@ -2910,7 +2898,7 @@ AC_DEFUN([_AC_LINK_IFELSE],
   [$0_BODY])]dnl
 [m4_ifvaln([$1], [AC_LANG_CONFTEST([$1])])]dnl
 [AS_IF([ac_fn_[]_AC_LANG_ABBREV[]_try_link "$LINENO"], [$2], [$3])
-rm -f core conftest.err conftest.$ac_objext \
+rm -f core conftest.err conftest.$ac_objext conftest.beam \
     conftest$ac_exeext[]m4_ifval([$1], [ conftest.$ac_ext])[]dnl
 ])# _AC_LINK_IFELSE
 
@@ -3059,84 +3047,89 @@ AC_DEFUN([AC_CHECK_FILES],
 ## Checking for declared symbols.  ##
 ## ------------------------------- ##
 
-
-# _AC_UNDECLARED_WARNING
+# _AC_UNDECLARED_BUILTIN
 # ----------------------
-# Set ac_[]_AC_LANG_ABBREV[]_decl_warn_flag=yes if the compiler uses a warning,
-# not a more-customary error, to report some undeclared identifiers.  Fail when
-# an affected compiler warns also on valid input.  _AC_PROG_PREPROC_WORKS_IFELSE
-# solves a related problem.
-AC_DEFUN([_AC_UNDECLARED_WARNING],
-[# The Clang compiler raises a warning for an undeclared identifier that matches
-# a compiler builtin function.  All extant Clang versions are affected, as of
-# Clang 3.6.0.  Test a builtin known to every version.  This problem affects the
-# C and Objective C languages, but Clang does report an error under C++ and
-# Objective C++.
-#
-# Passing -fno-builtin to the compiler would suppress this problem.  That
-# strategy would have the advantage of being insensitive to stray warnings, but
-# it would make tests less realistic.
-AC_CACHE_CHECK([how $[]_AC_CC[] reports undeclared, standard C functions],
-[ac_cv_[]_AC_LANG_ABBREV[]_decl_report],
-[AC_COMPILE_IFELSE([AC_LANG_PROGRAM([], [(void) strchr;])],
-  [AS_IF([test -s conftest.err], [dnl
-    # For AC_CHECK_DECL to react to warnings, the compiler must be silent on
-    # valid AC_CHECK_DECL input.  No library function is consistently available
-    # on freestanding implementations, so test against a dummy declaration.
-    # Include always-available headers on the off chance that they somehow
-    # elicit warnings.
-    AC_COMPILE_IFELSE([AC_LANG_PROGRAM([dnl
-#include <float.h>
+# Set ac_[]_AC_LANG_ABBREV[]_undeclared_builtin_options to any options
+# needed to make the compiler issue a hard error, not a warning, when
+# an undeclared function is used whose declaration happens to be
+# built into the compiler (e.g. 'strchr' is often known in advance to
+# the C compiler).  These options should not cause any other unrelated
+# warnings to become errors.  If no such options can be found, or if
+# they make the compiler error out on a correct program of the form
+# used by AC_CHECK_DECL, report failure.
+AC_DEFUN([_AC_UNDECLARED_BUILTIN],
+[AC_CACHE_CHECK(
+  [for $[]_AC_CC options needed to detect all undeclared functions],
+  [ac_cv_[]_AC_LANG_ABBREV[]_undeclared_builtin_options],
+  [ac_save_CFLAGS=$CFLAGS
+   ac_cv_[]_AC_LANG_ABBREV[]_undeclared_builtin_options='cannot detect'
+   for ac_arg in '' -fno-builtin; do
+     CFLAGS="$ac_save_CFLAGS $ac_arg"
+     # This test program should *not* compile successfully.
+     AC_COMPILE_IFELSE([AC_LANG_PROGRAM([], [(void) strchr;])],
+       [],
+       [# This test program should compile successfully.
+        # No library function is consistently available on
+        # freestanding implementations, so test against a dummy
+        # declaration.  Include always-available headers on the
+        # off chance that they somehow elicit warnings.
+        AC_COMPILE_IFELSE([AC_LANG_PROGRAM(
+[[#include <float.h>
 #include <limits.h>
 #include <stdarg.h>
 #include <stddef.h>
-extern void ac_decl (int, char *);],
-[@%:@ifdef __cplusplus
-  (void) ac_decl ((int) 0, (char *) 0);
+extern void ac_decl (int, char *);
+]],
+[[(void) ac_decl (0, (char *) 0);
   (void) ac_decl;
-@%:@else
-  (void) ac_decl;
-@%:@endif
-])],
-      [AS_IF([test -s conftest.err],
-	[AC_MSG_FAILURE([cannot detect from compiler exit status or warnings])],
-	[ac_cv_[]_AC_LANG_ABBREV[]_decl_report=warning])],
-      [AC_MSG_FAILURE([cannot compile a simple declaration test])])],
-    [AC_MSG_FAILURE([compiler does not report undeclared identifiers])])],
-  [ac_cv_[]_AC_LANG_ABBREV[]_decl_report=error])])
-
-case $ac_cv_[]_AC_LANG_ABBREV[]_decl_report in
-  warning) ac_[]_AC_LANG_ABBREV[]_decl_warn_flag=yes ;;
-  *) ac_[]_AC_LANG_ABBREV[]_decl_warn_flag= ;;
-esac
-])# _AC_UNDECLARED_WARNING
+]])],
+         [AS_IF([test x"$ac_arg" = x],
+           [ac_cv_[]_AC_LANG_ABBREV[]_undeclared_builtin_options='none needed'],
+           [ac_cv_[]_AC_LANG_ABBREV[]_undeclared_builtin_options=$ac_arg])
+          break],
+         [])])
+    done
+    CFLAGS=$ac_save_CFLAGS
+  ])
+  AS_CASE([$ac_cv_[]_AC_LANG_ABBREV[]_undeclared_builtin_options],
+    ['cannot detect'],
+      [AC_MSG_FAILURE([cannot make $[]_AC_CC report undeclared builtins])],
+    ['none needed'],
+      [ac_[]_AC_LANG_ABBREV[]_undeclared_builtin_options=''],
+      [ac_[]_AC_LANG_ABBREV[]_undeclared_builtin_options=$ac_cv_[]_AC_LANG_ABBREV[]_undeclared_builtin_options])
+])
 
 # _AC_CHECK_DECL_BODY
 # -------------------
 # Shell function body for AC_CHECK_DECL.
+# If we are compiling C, just refer to the name of the function, so we
+# don't implicitly declare it.  However, if we are compiling C++,
+# `(void) function_name;' won't work when function_name has more than one
+# overload, we need to fabricate a function call.  Fortunately, there is
+# no such thing as an implicit function declaration in C++.
+# If the function is defined as a macro, we cannot verify its signature
+# without calling it, and it might not expand to a construct that's valid
+# as the only statement in a function body; just report it as available.
 m4_define([_AC_CHECK_DECL_BODY],
 [  AS_LINENO_PUSH([$[]1])
-  # Initialize each $ac_[]_AC_LANG_ABBREV[]_decl_warn_flag once.
-  AC_DEFUN([_AC_UNDECLARED_WARNING_]_AC_LANG_ABBREV,
-	   [_AC_UNDECLARED_WARNING])dnl
-  AC_REQUIRE([_AC_UNDECLARED_WARNING_]_AC_LANG_ABBREV)dnl
-  [as_decl_name=`echo $][2|sed 's/ *(.*//'`]
-  [as_decl_use=`echo $][2|sed -e 's/(/((/' -e 's/)/) 0&/' -e 's/,/) 0& (/g'`]
-  AC_CACHE_CHECK([whether $as_decl_name is declared], [$[]3],
-  [ac_save_werror_flag=$ac_[]_AC_LANG_ABBREV[]_werror_flag
-  ac_[]_AC_LANG_ABBREV[]_werror_flag="$ac_[]_AC_LANG_ABBREV[]_decl_warn_flag$ac_[]_AC_LANG_ABBREV[]_werror_flag"
-  AC_COMPILE_IFELSE([AC_LANG_PROGRAM([$[]4],
-[@%:@ifndef $[]as_decl_name
-@%:@ifdef __cplusplus
-  (void) $[]as_decl_use;
-@%:@else
-  (void) $[]as_decl_name;
-@%:@endif
-@%:@endif
-])],
+  as_decl_name=`echo $[]2|sed 's/ *(.*//'`
+  AC_CACHE_CHECK([whether $][as_decl_name is declared], [$[]3],
+  [as_decl_use=`echo $[]2|sed -e 's/(/((/' -e 's/)/) 0&/' -e 's/,/) 0& (/g'`
+  AS_VAR_COPY([ac_save_FLAGS], [$[]6])
+  AS_VAR_APPEND([$[]6], [" $[]5"])
+  AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[$][4]],
+[[#ifndef $][as_decl_name
+#ifdef __cplusplus
+  (void) $][as_decl_use;
+#else
+  (void) $][as_decl_name;
+#endif
+#endif
+]])],
 		   [AS_VAR_SET([$[]3], [yes])],
 		   [AS_VAR_SET([$[]3], [no])])
-  ac_[]_AC_LANG_ABBREV[]_werror_flag=$ac_save_werror_flag])
+  AS_VAR_COPY([$[]6], [ac_save_FLAGS])
+])
   AS_LINENO_POP
 ])# _AC_CHECK_DECL_BODY
 
@@ -3146,18 +3139,23 @@ m4_define([_AC_CHECK_DECL_BODY],
 # -------------------------------------------------------
 # Check whether SYMBOL (a function, variable, or constant) is declared.
 AC_DEFUN([AC_CHECK_DECL],
-[AC_REQUIRE_SHELL_FN([ac_fn_]_AC_LANG_ABBREV[_check_decl],
-  [AS_FUNCTION_DESCRIBE([ac_fn_]_AC_LANG_ABBREV[_check_decl],
-    [LINENO SYMBOL VAR INCLUDES],
+[AC_REQUIRE_SHELL_FN([ac_fn_check_decl],
+  [AS_FUNCTION_DESCRIBE([ac_fn_check_decl],
+    [LINENO SYMBOL VAR INCLUDES EXTRA-OPTIONS FLAG-VAR],
     [Tests whether SYMBOL is declared in INCLUDES, setting cache variable
-     VAR accordingly.])],
+     VAR accordingly.  Pass EXTRA-OPTIONS to the compiler, using FLAG-VAR.])],
   [_$0_BODY])]dnl
+dnl Initialize each $ac_[]_AC_LANG_ABBREV[]_undeclared_builtin_options once.
+[AC_DEFUN([_AC_UNDECLARED_BUILTIN_]_AC_LANG_ABBREV,
+          [_AC_UNDECLARED_BUILTIN])]dnl
+[AC_REQUIRE([_AC_UNDECLARED_BUILTIN_]_AC_LANG_ABBREV)]dnl
 [AS_VAR_PUSHDEF([ac_Symbol], [ac_cv_have_decl_$1])]dnl
-[ac_fn_[]_AC_LANG_ABBREV[]_check_decl ]dnl
-["$LINENO" "$1" "ac_Symbol" "AS_ESCAPE([AC_INCLUDES_DEFAULT([$4])], [""])"
-AS_VAR_IF([ac_Symbol], [yes], [$2], [$3])
-AS_VAR_POPDEF([ac_Symbol])dnl
-])# AC_CHECK_DECL
+[ac_fn_check_decl ]dnl
+["$LINENO" "$1" "ac_Symbol" "AS_ESCAPE([AC_INCLUDES_DEFAULT([$4])], [""])" ]dnl
+["$ac_[]_AC_LANG_ABBREV[]_undeclared_builtin_options" "_AC_LANG_PREFIX[]FLAGS"]
+[AS_VAR_IF([ac_Symbol], [yes], [$2], [$3])]dnl
+[AS_VAR_POPDEF([ac_Symbol])]dnl
+)# AC_CHECK_DECL
 
 
 # _AC_CHECK_DECLS(SYMBOL, ACTION-IF_FOUND, ACTION-IF-NOT-FOUND,

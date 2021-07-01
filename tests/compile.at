@@ -2,7 +2,7 @@
 
 AT_BANNER([Low level compiling/preprocessing macros.])
 
-# Copyright (C) 2000-2001, 2003, 2005-2017, 2020 Free Software
+# Copyright (C) 2000-2001, 2003, 2005-2017, 2020-2021 Free Software
 # Foundation, Inc.
 #
 # This program is free software: you can redistribute it and/or modify
@@ -175,11 +175,6 @@ AT_CLEANUP
 
 AT_SETUP([AC_LANG_SOURCE example])
 
-# Set CONFIG_SITE to a nonexistent file, so that there are
-# no worries about configure output caused by sourcing a config.site.
-CONFIG_SITE=no-such-file
-export CONFIG_SITE
-
 AT_DATA([configure.ac],
 [[# Taken from autoconf.texi:Generating Sources.
 # The only change is to not fail if gcc doesn't work.
@@ -220,11 +215,6 @@ AT_CLEANUP
 ## ------------------------- ##
 
 AT_SETUP([AC_LANG_PROGRAM example])
-
-# Set CONFIG_SITE to a nonexistent file, so that there are
-# no worries about configure output caused by sourcing a config.site.
-CONFIG_SITE=no-such-file
-export CONFIG_SITE
 
 AT_DATA([configure.ac],
 [[# Taken from autoconf.texi:Generating Sources.
@@ -332,7 +322,7 @@ AC_RUN_IFELSE([AC_LANG_PROGRAM([], [return 2])],
 	      [AC_MSG_ERROR([saw `return 2' as a success])],
 	      [estatus=$?
 test $estatus != 2 &&
-  AC_MSG_ERROR([did not get as 2 exit status: $estatus])])
+  AC_MSG_ERROR([did not get 2 as exit status: $estatus])])
 
 # The old stinky one.
 AC_TRY_RUN([int main (void) { return 3; }],

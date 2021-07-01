@@ -2,7 +2,7 @@
 
 AT_BANNER([Executables (autoheader, autoupdate...).])
 
-# Copyright (C) 2000-2001, 2003-2004, 2006-2017, 2020 Free Software
+# Copyright (C) 2000-2001, 2003-2004, 2006-2017, 2020-2021 Free Software
 # Foundation, Inc.
 #
 # This program is free software: you can redistribute it and/or modify
@@ -662,6 +662,52 @@ arbitrary $text
 AT_CLEANUP
 
 
+# autoconf: timestamp changes
+# ---------------------------
+# Automake needs autoconf to update the timestamp on the configure script
+# whenever configure.ac or aclocal.m4 changes, even if the contents of the
+# configure script have not changed.
+AT_SETUP([autoconf: timestamp changes])
+
+AT_DATA([aclocal.m4],
+[[AC_DEFUN([local_KILROY], [# kilroy was here
+])
+]])
+
+AT_DATA_AUTOCONF([configure.ac],
+[[AC_INIT
+AC_PROG_CC
+local_KILROY
+AC_OUTPUT
+]])
+
+AT_CHECK_AUTOCONF
+
+cp configure configure.1
+sleep 1
+printf '%s\n' 'AC_LIBSOURCES([foo.c])dn@&t@l' >> configure.ac
+
+# This step must not use --force.
+# We don't need to check shell syntax, because if all goes well,
+# the script will be unchanged from what it was in the first autoconf
+# pass, and that was already checked.
+AT_CHECK_M4([autoconf])
+AT_CHECK([cmp configure configure.1])
+AT_CHECK([test configure -nt configure.1])
+
+cp configure configure.2
+sleep 1
+printf '%s\n' \
+  'AC_DEFUN([unused_MACRO], [# bob was there too' \
+  '])' >> aclocal.m4
+
+# Same as above.
+AT_CHECK_M4([autoconf])
+AT_CHECK([cmp configure configure.2])
+AT_CHECK([test configure -nt configure.2])
+
+AT_CLEANUP
+
 
 ## --------- ##
 ## ifnames.  ##
@@ -1035,6 +1081,7 @@ AT_CHECK_AUTOHEADER([-Wno-obsolete], [
   AC_APPLE_UNIVERSAL_BUILD
   HAVE_INTTYPES_H
   HAVE_STDINT_H
+  HAVE_STDIO_H
   HAVE_STDLIB_H
   HAVE_STRINGS_H
   HAVE_STRING_H
@@ -1533,20 +1580,36 @@ end-language: "Autoconf-without-aclocal-m4"
 # A failed redirection may cause a status of 2 with FreeBSD sh.
 AT_CHECK([(: > sub/some-file) || exit 1 && exit 77], 1, [ignore], [ignore])
 
-# Failure to create cache directory.
+# Failure to create cache directory due to access permissions.
 AT_CHECK_AUTOCONF([], [1], [ignore], [stderr])
 AT_CHECK([grep 'cannot create .*autom4te.cache' stderr], [0], [ignore])
+AT_CHECK([grep ': Permission denied' stderr], [0], [ignore])
 AT_CHECK([test -f configure], [1])
 
+# Failure to create cache directory due to something else in the way.
 chmod u+w sub
+: > sub/autom4te.cache
+AT_CHECK_AUTOCONF([], [1], [ignore], [stderr])
+AT_CHECK([grep 'cannot create .*autom4te.cache' stderr], [0], [ignore])
+AT_CHECK([grep ': File exists' stderr], [0], [ignore])
+AT_CHECK([test -f configure], [1])
+
+# This time, creation should succeed.
+rm -f sub/autom4te.cache
 AT_CHECK_AUTOCONF
+AT_CHECK([test -d sub/autom4te.cache])
 
 rm -f configure sub/autom4te.cache/*
 chmod a-w sub/autom4te.cache
 
 # Failure to create a file in the cache directory.
 AT_CHECK_AUTOCONF([], [1], [ignore], [stderr])
-AT_CHECK([grep 'cannot open.*autom4te.cache' stderr], [0], [ignore])
+AT_CHECK([grep 'cannot open .*autom4te.cache' stderr], [0], [ignore])
+AT_CHECK([test -f configure], [1])
+
+# If the directory already exists, that should be fine.
+chmod u+w sub/autom4te.cache
+AT_CHECK_AUTOCONF
 
 AT_CLEANUP
 

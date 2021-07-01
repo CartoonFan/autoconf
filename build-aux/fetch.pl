@@ -1,5 +1,5 @@
 #! /usr/bin/perl
-# Copyright (C) 2020 Free Software Foundation, Inc.
+# Copyright (C) 2020-2021 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -43,7 +43,6 @@ our %to_fetch = (
   'build-aux' => {
     automake => [
       'lib/install-sh',
-      'lib/mdate-sh',
     ],
     config => [
       'config.guess',
@@ -144,23 +143,33 @@ sub savannah_url($$)
     }
   else
     {
-      my $gitweb_base = 'https://git.savannah.gnu.org/gitweb/?p=';
-      my $gitweb_op   = '.git;a=blob_plain;hb=HEAD;f=';
+      my $cgit_base = 'https://git.savannah.gnu.org/cgit/';
+      my $cgit_op   = '.git/plain/';
 
-      return $gitweb_base . $repo . $gitweb_op . $filename;
+      return $cgit_base . $repo . $cgit_op . $filename;
   }
 }
 
 
 # slurp ($filename)
 # Read the contents of $filename into a scalar and return them.
+# If $filename does not exist, return undef; any other error is fatal.
 sub slurp ($)
 {
   my ($filename) = @_;
   local $/; # engage slurp mode
-  open my $fh, '<', $filename
-    or die "$filename: $!\n";
-  return scalar <$fh>;
+  if (open my $fh, '<', $filename)
+    {
+      return scalar <$fh>;
+    }
+  elsif ($!{ENOENT})
+    {
+      return undef;
+    }
+  else
+    {
+      die "$filename: $!\n";
+    }
 }
 
 
@@ -174,7 +183,7 @@ sub replace_if_change ($$$)
   my ($file, $newcontents, $quiet) = @_;
   my $oldcontents = slurp $file;
 
-  if ($oldcontents eq $newcontents)
+  if (defined $oldcontents && $oldcontents eq $newcontents)
     {
       print STDERR "$file is unchanged\n" unless $quiet;
       return;
@@ -191,10 +200,13 @@ sub replace_if_change ($$$)
   close $tmp_fh
     or die "$0: writing to $tmp_name: $!\n";
 
-  # Preserve the permissions of the original file.
-  my $st = stat $file;
-  chmod (S_IMODE ($st->mode), $tmp_name)
-    or die "$0: setting permissions on $tmp_name: $!\n";
+  # Preserve the permissions of the original file, if it exists.
+  if (defined $oldcontents)
+    {
+      my $st = stat $file;
+      chmod (S_IMODE ($st->mode), $tmp_name)
+        or die "$0: setting permissions on $tmp_name: $!\n";
+    }
 
   rename $tmp_name, $file
     or die "$0: rename($tmp_name, $file): $!\n";

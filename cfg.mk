@@ -1,5 +1,5 @@
 # Customize maint.mk for Autoconf.            -*- Makefile -*-
-# Copyright (C) 2003-2004, 2006, 2008-2017, 2020 Free Software
+# Copyright (C) 2003-2004, 2006, 2008-2017, 2020-2021 Free Software
 # Foundation, Inc.
 
 # This program is free software: you can redistribute it and/or modify
@@ -84,7 +84,10 @@ update-release-year:
 .PHONY: update-release-year
 
 # Prevent incorrect NEWS edits.
-old_NEWS_hash = b6af714b06666cbc66cd26169a56bd9d
+old_NEWS_hash = 981169afdd2c97642125938f80a26b7f
+
+# Update autoconf-latest.tar.* symlinks during 'make stable/beta'.
+GNUPLOADFLAGS = --symlink-regex
 
 exclude_file_name_regexp--sc_prohibit_undesirable_word_seq = \
   ^(maint\.mk|build-aux/texinfo\.tex)$$

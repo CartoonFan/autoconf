@@ -6,7 +6,8 @@ eval 'case $# in 0) exec @PERL@ -S "$0";; *) exec @PERL@ -S "$0" "$@";; esac'
     if 0;
 
 # autoreconf - install the GNU Build System in a directory tree
-# Copyright (C) 1994, 1999-2017, 2020 Free Software Foundation, Inc.
+# Copyright (C) 1994, 1999-2017, 2020-2021 Free Software Foundation,
+# Inc.
 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -46,7 +47,7 @@ BEGIN
 # Do not use Cwd::chdir, since it might hang.
 use Cwd qw (cwd);
 use File::Copy qw (copy);
-use File::Temp ();
+use File::Temp qw (tempfile);
 
 use Autom4te::ChannelDefs;
 use Autom4te::Channels;
@@ -310,6 +311,38 @@ sub can_install_aux_files
   return 1;
 }
 
+# extract_time_stamp ($fname)
+# ---------------------------
+# Extract a timestamp line from $fname.
+# This is hardwired to know what to look for in the files we currently install.
+sub extract_time_stamp
+{
+  my $fname = shift;
+  open my $fh, '<', $fname
+    or fatal "opening $fname: $!";
+  while (my $l = <$fh>)
+    {
+      if ($l =~ /^(?:scriptversion|timestamp)='?(\d\d\d\d-\d\d-\d\d(?:\.\d\d)?)/)
+        {
+          return $1;
+        }
+    }
+  # Old versions of install-sh did not have a timestamp line.
+  return '1970-01-01';
+}
+
+# our_aux_file_is_newer ($dest, $src)
+# -----------------------------------
+# True if our copy of an aux file ($src) has a newer 'timestamp' line
+# than the matching line in $dest.
+sub our_aux_file_is_newer
+{
+  my ($dest, $src) = @_;
+  my $dstamp = extract_time_stamp ($dest);
+  my $sstamp = extract_time_stamp ($src);
+  return $sstamp gt $dstamp;
+}
+
 # try_install_aux_files
 # ---------------------
 # Install each of the aux files listed in @$auxfiles, that we are able
@@ -341,6 +374,11 @@ sub install_aux_file
 {
   my ($destdir, $f, $src) = @_;
   my $dest = "${destdir}/$f";
+  if (-e $dest && ! our_aux_file_is_newer ($dest, $src))
+    {
+      return;
+    }
+
   if ($symlink)
     {
       if ($force || ! -l $dest || readlink $dest != $src)
@@ -348,11 +386,11 @@ sub install_aux_file
           if (-e $dest)
             {
               unlink $dest
-                or fatal "rm -f $dest: $!\n";
+                or fatal "rm -f $dest: $!";
             }
           verb "linking $dest to $src";
           symlink $src, $dest
-            or fatal "ln -s $src $dest: $!\n";
+            or fatal "ln -s $src $dest: $!";
         }
     }
   else
@@ -360,14 +398,11 @@ sub install_aux_file
       if (-e $dest && ! -f $dest)
         {
           unlink $dest
-            or fatal "rm -f $dest: $!\n";
+            or fatal "rm -f $dest: $!";
         }
-      my $temp = new File::Temp (UNLINK => 0, DIR => $destdir);
-      # Older Perls don't convert $temp to its filename
-      # in all the places we need it to.
-      my $tempname = $temp->filename;
+      my ($temp, $tempname) = tempfile (UNLINK => 0, DIR => $destdir);
       copy ($src, $tempname)
-        or fatal "copying $src to $tempname: $!\n";
+        or fatal "copying $src to $tempname: $!";
       make_executable ($tempname) if -x $src;
       update_file ($tempname, $dest, $force);
     }
@@ -384,7 +419,7 @@ sub make_executable
   $perm |= 0010 if ($perm & 0040);
   $perm |= 0001 if ($perm & 0004);
   chmod $perm, $f
-    or fatal "chmod $f: $!\n";
+    or fatal "chmod $f: $!";
 }
 
 
@@ -414,7 +449,7 @@ sub autoreconf_current_directory ($)
 	  s/dnl.*//;
 	  $uses_autoconf = 1 if /AC_INIT/;
 	  # See below for why we look for gettext here.
-	  $uses_gettext = 1  if /^AM_GNU_GETTEXT_VERSION/;
+	  $uses_gettext = 1  if /^AM_GNU_GETTEXT_(?:REQUIRE_)?VERSION/;
 	}
       if (!$uses_autoconf)
         {
@@ -442,12 +477,12 @@ sub autoreconf_current_directory ($)
   # not.  I guess that once Gettext move to 2.5x we will be able to,
   # but in the meanwhile forget it.
   #
-  # We can only grep for AM_GNU_GETTEXT_VERSION in configure.ac.  You
-  # might think this approach is naive, and indeed it is, as it
-  # prevents one to embed AM_GNU_GETTEXT_VERSION in another *.m4, but
-  # anyway we don't limit the generality, since... that's what
-  # autopoint does.  Actually, it is even more restrictive, as it
-  # greps for '^AM_GNU_GETTEXT_VERSION('.  We did this above, while
+  # We can only grep for AM_GNU_GETTEXT_(REQUIRE_)?VERSION in configure.ac.
+  # You might think this approach is naive, and indeed it is, as it prevents
+  # one to embed AM_GNU_GETTEXT_(REQUIRE_)?VERSION in another *.m4, but
+  # anyway we don't limit the generality, since... that's what autopoint does.
+  # Actually, it is even more restrictive, as it greps for
+  # '^AM_GNU_GETTEXT_(REQUIRE_)?VERSION('.  We did this above, while
   # scanning configure.ac.
   if (!$uses_gettext)
     {
@@ -610,10 +645,18 @@ sub autoreconf_current_directory ($)
 	}
     }
 
-  # Gettext consistency checks...
-  error $configure_ac, "AM_GNU_GETTEXT is used, but not AM_GNU_GETTEXT_VERSION"
+  # Gettext consistency checks.
+  # Some projects intentionally don't call AM_GNU_GETTEXT_(REQUIRE_)VERSION
+  # because they have all of the gettext infrastructure checked into version
+  # control and they want us to _not_ run autopoint.  Therefore, these
+  # diagnostics are only warnings.
+  msg('syntax', $configure_ac,
+      "AM_GNU_GETTEXT is used, but not AM_GNU_GETTEXT_VERSION"
+      . " or AM_GNU_GETTEXT_REQUIRE_VERSION")
     if $uses_gettext_via_traces && ! $uses_gettext;
-  error $configure_ac, "AM_GNU_GETTEXT_VERSION is used, but not AM_GNU_GETTEXT"
+  msg('syntax', $configure_ac,
+      "AM_GNU_GETTEXT_VERSION or AM_GNU_GETTEXT_REQUIRE_VERSION is used,"
+      . " but not AM_GNU_GETTEXT")
     if $uses_gettext && ! $uses_gettext_via_traces;
 
 
@@ -771,10 +814,14 @@ sub autoreconf_current_directory ($)
   # ---------------------------------------------------- #
   # Installing aux files and checking for missing ones.  #
   # ---------------------------------------------------- #
+  try_install_aux_files (\@aux_files, $aux_dir || '.')
+    if $install && $force;
+
   my @missing_aux_files = find_missing_aux_files (\@aux_files, $aux_dir);
   if (@missing_aux_files)
     {
-      try_install_aux_files (\@missing_aux_files, $aux_dir || '.') if $install;
+      try_install_aux_files (\@missing_aux_files, $aux_dir || '.')
+        if $install && !$force;
 
       for (0 .. $#missing_aux_files)
         {

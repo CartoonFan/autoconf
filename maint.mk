@@ -2,7 +2,7 @@
 # This Makefile fragment tries to be general-purpose enough to be
 # used by many projects via the gnulib maintainer-makefile module.
 
-## Copyright (C) 2001-2020 Free Software Foundation, Inc.
+## Copyright (C) 2001-2021 Free Software Foundation, Inc.
 ##
 ## This program is free software: you can redistribute it and/or modify
 ## it under the terms of the GNU General Public License as published by
@@ -64,7 +64,11 @@ VC_LIST = $(srcdir)/$(_build-aux)/vc-list-files -C $(srcdir)
 
 # You can override this variable in cfg.mk if your gnulib submodule lives
 # in a different location.
-gnulib_dir ?= $(srcdir)/gnulib
+gnulib_dir ?= $(shell if test -d $(srcdir)/gnulib; then \
+			echo $(srcdir)/gnulib; \
+		else \
+			echo ${GNULIB_SRCDIR}; \
+		fi)
 
 # You can override this variable in cfg.mk to set your own regexp
 # matching files to ignore.
@@ -163,7 +167,7 @@ ifneq ($(_gl-Makefile),)
 _cfg_mk := $(wildcard $(srcdir)/cfg.mk)
 
 # Collect the names of rules starting with 'sc_'.
-syntax-check-rules := $(sort $(shell $(SED) -n \
+syntax-check-rules := $(sort $(shell env LC_ALL=C $(SED) -n \
    's/^\(sc_[a-zA-Z0-9_-]*\):.*/\1/p' $(srcdir)/$(ME) $(_cfg_mk)))
 .PHONY: $(syntax-check-rules)
 
@@ -464,12 +468,15 @@ sc_error_message_warn_fatal:
 	       exit 1; }						\
 	  || :
 
-# Error messages should not start with a capital letter
+# Error messages should not start with a capital letter;
+# however, if they start with an entire fully uppercased word, that's
+# probably a proper noun and it should stay that way.  We also exempt
+# known instances of proper nouns that should stay mixed-case.
 sc_error_message_uppercase:
 	@$(VC_LIST_EXCEPT)						\
 	  | xargs $(GREP) -nEA2 '[^rp]error *\(' /dev/null		\
 	  | $(GREP) -E '"[A-Z]'						\
-	  | $(GREP) -vE '"FATAL|"WARNING|"Java|"C#|PRIuMAX'		\
+	  | $(GREP) -vE '"([A-Z0-9_]{2,}\>|Java|C#|(PRI|SCN)[dioux])'	\
 	  && { echo '$(ME): found capitalized error message' 1>&2;	\
 	       exit 1; }						\
 	  || :
