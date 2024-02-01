@@ -686,7 +686,7 @@ sub report_bad_channel ($$)
       # don't treat those cases as errors.
       $report_as = 'obsolete';
       $message = "use of $q_channel as a diagnostic category is obsolete\n";
-      $message .= "(see automake --help for a list of valid categories)";
+      $message .= "(see autom4te --help for a list of valid categories)";
     }
   elsif ($channel eq 'none'
          || ($channel =~ /^no-/ && exists $channels{substr($channel, 3)}))
