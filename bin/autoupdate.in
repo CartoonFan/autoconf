@@ -157,7 +157,7 @@ sub handle_autoconf_macros ()
 	{
 	  $au_macros{$macro} = 1;
 	}
-      elsif ($file =~ /(^|\/)m4sugar\/(m4sugar|version)\.m4$/)
+      elsif ($file =~ /(^|\/)m4sugar\/(m4sugar|foreach|recursive|version)\.m4$/)
 	{
 	  # Add the m4sugar macros to m4_builtins.
 	  $m4_builtins{$macro} = 1;

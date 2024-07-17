@@ -399,13 +399,7 @@ m4_define([m4_ifndef],
 # All the values are optional, and the macro is robust to active
 # symbols properly quoted.
 #
-# Please keep foreach.m4 in sync with any adjustments made here.
-m4_define([m4_case],
-[m4_if([$#], 0, [],
-       [$#], 1, [],
-       [$#], 2, [$2],
-       [$1], [$2], [$3],
-       [$0([$1], m4_shift3($@))])])
+# Has multiple definitions, see foreach.m4 and recursive.m4.
 
 
 # m4_bmatch(SWITCH, RE1, VAL1, RE2, VAL2, ..., DEFAULT)
@@ -424,13 +418,8 @@ m4_define([m4_case],
 # All the values are optional, and the macro is robust to active symbols
 # properly quoted.
 #
-# Please keep foreach.m4 in sync with any adjustments made here.
-m4_define([m4_bmatch],
-[m4_if([$#], 0, [m4_fatal([$0: too few arguments: $#])],
-       [$#], 1, [m4_fatal([$0: too few arguments: $#: $1])],
-       [$#], 2, [$2],
-       [m4_if(m4_bregexp([$1], [$2]), -1, [$0([$1], m4_shift3($@))],
-	      [$3])])])
+# Has multiple definitions, see foreach.m4 and recursive.m4.
+
 
 # m4_argn(N, ARGS...)
 # -------------------
@@ -470,14 +459,16 @@ m4_define([_m4_cdr],
        [, m4_dquote(m4_shift($@))])])
 
 
-
 # m4_cond(TEST1, VAL1, IF-VAL1, TEST2, VAL2, IF-VAL2, ..., [DEFAULT])
 # -------------------------------------------------------------------
-# Similar to m4_if, except that each TEST is expanded when encountered.
-# If the expansion of TESTn matches the string VALn, the result is IF-VALn.
-# The result is DEFAULT if no tests passed.  This macro allows
-# short-circuiting of expensive tests, where it pays to arrange quick
-# filter tests to run first.
+# Similar to m4_if: if the expansion of TESTn matches the string VALn,
+# the overall expression expands to IF-VALn.  If none of the TEST/VAL
+# pairs match, the result is DEFAULT.  The differences from m4_if are
+# that each TEST is expanded a second time during the evaluation of
+# m4_cond (so, normally, you should quote each TEST, unlike m4_if) and
+# that second expansion happens only if no previous TEST/VAL pairs
+# matched.  Thus, m4_cond provides "short circuit" behavior: expensive
+# TESTs will not be evaluated unless necessary.
 #
 # For an example, consider a previous implementation of _AS_QUOTE_IFELSE:
 #
@@ -501,18 +492,12 @@ m4_define([_m4_cdr],
 # In the common case of $1 with no backslash, only one m4_index expansion
 # occurs, and m4_eval is avoided altogether.
 #
-# Please keep foreach.m4 in sync with any adjustments made here.
+# _m4_cond has multiple definitions, see foreach.m4 and recursive.m4.
 m4_define([m4_cond],
 [m4_if([$#], [0], [m4_fatal([$0: cannot be called without arguments])],
        [$#], [1], [$1],
        m4_eval([$# % 3]), [2], [m4_fatal([$0: missing an argument])],
        [_$0($@)])])
-
-m4_define([_m4_cond],
-[m4_if(($1), [($2)], [$3],
-       [$#], [3], [],
-       [$#], [4], [$4],
-       [$0(m4_shift3($@))])])
 
 
 ## ---------------------------------------- ##
@@ -521,34 +506,35 @@ m4_define([_m4_cond],
 
 # m4_bpatsubsts(STRING, RE1, SUBST1, RE2, SUBST2, ...)
 # ----------------------------------------------------
-# m4 equivalent of
+# m4 moral equivalent of
 #
-#   $_ = STRING;
+#   $_ = "[$STRING]";
 #   s/RE1/SUBST1/g;
 #   s/RE2/SUBST2/g;
 #   ...
+#   $_ = substr $_, 1, -1;
 #
 # All the values are optional, and the macro is robust to active symbols
 # properly quoted.
 #
-# I would have liked to name this macro 'm4_bpatsubst', unfortunately,
-# due to quotation problems, I need to double quote $1 below, therefore
-# the anchors are broken :(  I can't let users be trapped by that.
+# Double quotation of STRING, which is necessary for robustness,
+# is visible to the regular expressions, meaning most importantly
+# that string boundary anchors (^ and $) do not work as expected :(
+# Therefore this macro is not a drop-in replacement for ordinary
+# 'm4_bpatsubst' and has a different name.
 #
-# Recall that m4_shift3 always results in an argument.  Hence, we need
-# to distinguish between a final deletion vs. ending recursion.
+# Recall that m4_shift3 always results in an argument.  This
+# necessitates the trailing m4_if(m4_eval()) construct, which
+# distinguishes a final deletion (i.e. SUBSTn was []) from the
+# end of the arguments.
 #
-# Please keep foreach.m4 in sync with any adjustments made here.
+# _m4_bpatsubsts has multiple definitions, see foreach.m4 and recursive.m4.
 m4_define([m4_bpatsubsts],
 [m4_if([$#], 0, [m4_fatal([$0: too few arguments: $#])],
        [$#], 1, [m4_fatal([$0: too few arguments: $#: $1])],
        [$#], 2, [m4_unquote(m4_builtin([patsubst], [[$1]], [$2]))],
        [$#], 3, [m4_unquote(m4_builtin([patsubst], [[$1]], [$2], [$3]))],
        [_$0($@m4_if(m4_eval($# & 1), 0, [,]))])])
-m4_define([_m4_bpatsubsts],
-[m4_if([$#], 2, [$1],
-       [$0(m4_builtin([patsubst], [[$1]], [$2], [$3]),
-	   m4_shift3($@))])])
 
 
 # m4_copy(SRC, DST)
@@ -715,25 +701,9 @@ m4_define([m4_popdef],
 # -----------------
 # Returns ... shifted N times.  Useful for recursive "varargs" constructs.
 #
-# Autoconf does not use this macro, because it is inherently slower than
-# calling the common cases of m4_shift2 or m4_shift3 directly.  But it
-# might as well be fast for other clients, such as Libtool.  One way to
-# do this is to expand $@ only once in _m4_shiftn (otherwise, for long
-# lists, the expansion of m4_if takes twice as much memory as what the
-# list itself occupies, only to throw away the unused branch).  The end
-# result is strictly equivalent to
-#   m4_if([$1], 1, [m4_shift(,m4_shift(m4_shift($@)))],
-#         [_m4_shiftn(m4_decr([$1]), m4_shift(m4_shift($@)))])
-# but with the final 'm4_shift(m4_shift($@)))' shared between the two
-# paths.  The first leg uses a no-op m4_shift(,$@) to balance out the ().
-#
-# Please keep foreach.m4 in sync with any adjustments made here.
+# _m4_shiftn has multiple definitions, see foreach.m4 and recursive.m4.
 m4_define([m4_shiftn],
 [m4_assert(0 < $1 && $1 < $#)_$0($@)])
-
-m4_define([_m4_shiftn],
-[m4_if([$1], 1, [m4_shift(],
-       [$0(m4_decr([$1])]), m4_shift(m4_shift($@)))])
 
 # m4_shift2(...)
 # m4_shift3(...)
@@ -759,12 +729,11 @@ m4_define([_m4_shift3],
 
 # m4_undefine(NAME)
 # -----------------
-# Like the original, except guarantee a warning when using something which is
-# undefined (unlike M4 1.4.x).
+# Like the primitive, except guarantee a warning when NAME is already
+# undefined.  Needed only for M4 1.4.x (see m4_init).
 #
 # This macro is called frequently, so minimize the amount of additional
-# expansions by skipping m4_ifndef.  Better yet, if __m4_version__ exists,
-# (added in M4 1.6), then let m4 do the job for us (see m4_init).
+# expansions by skipping m4_ifndef.
 m4_define([m4_undefine],
 [m4_if([$#], [0], [[$0]],
        [$#], [1], [m4_ifdef([$1], [_m4_undefine([$1])],
@@ -845,11 +814,7 @@ m4_define([_m4_curry],               [[$1])])
 # unnecessary dnl's and have the macros indented properly.  No concatenation
 # occurs after a STRING; use m4_unquote(m4_join(,STRING)) for that.
 #
-# Please keep foreach.m4 in sync with any adjustments made here.
-m4_define([m4_do],
-[m4_if([$#], 0, [],
-       [$#], 1, [$1[]],
-       [$1[]$0(m4_shift($@))])])
+# Has multiple definitions, see foreach.m4 and recursive.m4.
 
 
 # m4_dquote(ARGS)
@@ -862,11 +827,7 @@ m4_define([m4_dquote],  [[$@]])
 # -------------------
 # Return ARGS as an unquoted list of double-quoted arguments.
 #
-# Please keep foreach.m4 in sync with any adjustments made here.
-m4_define([m4_dquote_elt],
-[m4_if([$#], [0], [],
-       [$#], [1], [[[$1]]],
-       [[[$1]],$0(m4_shift($@))])])
+# Has multiple definitions, see foreach.m4 and recursive.m4.
 
 
 # m4_echo(ARGS)
@@ -988,10 +949,7 @@ m4_define([_m4_quote],
 # ----------------
 # Output ARGS in reverse order.
 #
-# Please keep foreach.m4 in sync with any adjustments made here.
-m4_define([m4_reverse],
-[m4_if([$#], [0], [], [$#], [1], [[$1]],
-       [$0(m4_shift($@)), [$1]])])
+# Has multiple definitions, see foreach.m4 and recursive.m4.
 
 
 # m4_unquote(ARGS)
@@ -1152,21 +1110,12 @@ m4_define([_m4_for],
 # requires swapping the argument order in the helper), insert an ignored
 # third argument, and use m4_shift3 to detect when recursion is complete,
 # at which point this looks very much like m4_map_args.
+#
+# _m4_foreach has multiple definitions, see foreach.m4 and recursive.m4.
 m4_define([m4_foreach],
 [m4_if([$2], [], [],
        [m4_pushdef([$1])_$0([m4_define([$1],], [)$3], [],
   $2)m4_popdef([$1])])])
-
-# _m4_foreach(PRE, POST, IGNORED, ARG...)
-# ---------------------------------------
-# Form the common basis of the m4_foreach and m4_map macros.  For each
-# ARG, expand PRE[ARG]POST[].  The IGNORED argument makes recursion
-# easier, and must be supplied rather than implicit.
-#
-# Please keep foreach.m4 in sync with any adjustments made here.
-m4_define([_m4_foreach],
-[m4_if([$#], [3], [],
-       [$1[$4]$2[]$0([$1], [$2], m4_shift3($@))])])
 
 
 # m4_foreach_w(VARIABLE, LIST, EXPRESSION)
@@ -1260,14 +1209,7 @@ m4_define([m4_map_args],
 #   => (c,d)
 #   => (e)
 #
-# Please keep foreach.m4 in sync with any adjustments made here.
-m4_define([m4_map_args_pair],
-[m4_if([$#], [0], [m4_fatal([$0: too few arguments: $#])],
-       [$#], [1], [m4_fatal([$0: too few arguments: $#: $1])],
-       [$#], [2], [],
-       [$#], [3], [m4_default([$2], [$1])([$3])[]],
-       [$#], [4], [$1([$3], [$4])[]],
-       [$1([$3], [$4])[]$0([$1], [$2], m4_shift(m4_shift3($@)))])])
+# Has multiple definitions, see foreach.m4 and recursive.m4.
 
 
 # m4_map_args_sep([PRE], [POST], [SEP], ARG...)
@@ -2207,9 +2149,11 @@ m4_defn([m4_cr_digits])dnl
 # in places where m4_translit is faster than an equivalent m4_bpatsubst;
 # the regex '[^a-z]' is equivalent to:
 #  m4_translit(m4_dquote(m4_defn([m4_cr_all])), [a-z])
+#
+# Note: m4_for is not yet available.
 m4_define([m4_cr_all],
-m4_translit(m4_dquote(m4_format(m4_dquote(m4_for(
-  ,1,255,,[[%c]]))m4_for([i],1,255,,[,i]))), [$*-], [*$])-)
+m4_translit(m4_dquote(m4_format(m4_dquote(
+  _m4_for(1,255,1,[m4_ignore(],[)[%c]]))_m4_for(1,255,1,[,]))), [$*-], [*$])-)
 
 
 # _m4_define_cr_not(CATEGORY)
@@ -2440,33 +2384,15 @@ note: 'dn@&t@l' is a macro]))])dnl
 # Produce ARG1SEPARG2...SEPARGn.  Avoid back-to-back SEP when a given ARG
 # is the empty string.  No expansion is performed on SEP or ARGs.
 #
-# Since the number of arguments to join can be arbitrarily long, we
-# want to avoid having more than one $@ in the macro definition;
-# otherwise, the expansion would require twice the memory of the already
-# long list.  Hence, m4_join merely looks for the first non-empty element,
-# and outputs just that element; while _m4_join looks for all non-empty
-# elements, and outputs them following a separator.  The final trick to
-# note is that we decide between recursing with $0 or _$0 based on the
-# nested m4_if ending with '_'.
-#
-# Please keep foreach.m4 in sync with any adjustments made here.
-m4_define([m4_join],
-[m4_if([$#], [1], [],
-       [$#], [2], [[$2]],
-       [m4_if([$2], [], [], [[$2]_])$0([$1], m4_shift2($@))])])
-m4_define([_m4_join],
-[m4_if([$#$2], [2], [],
-       [m4_if([$2], [], [], [[$1$2]])$0([$1], m4_shift2($@))])])
+# Has multiple definitions, see foreach.m4 and recursive.m4.
+
 
 # m4_joinall(SEP, ARG1, ARG2...)
 # ------------------------------
 # Produce ARG1SEPARG2...SEPARGn.  An empty ARG results in back-to-back SEP.
 # No expansion is performed on SEP or ARGs.
 #
-# Please keep foreach.m4 in sync with any adjustments made here.
-m4_define([m4_joinall], [[$2]_$0([$1], m4_shift($@))])
-m4_define([_m4_joinall],
-[m4_if([$#], [2], [], [[$1$3]$0([$1], m4_shift2($@))])])
+# Has multiple definitions, see foreach.m4 and recursive.m4.
 
 # m4_combine([SEPARATOR], PREFIX-LIST, [INFIX], SUFFIX...)
 # --------------------------------------------------------
@@ -2759,8 +2685,10 @@ m4_define([m4_cmp],
 
 # m4_list_cmp(A, B)
 # -----------------
+# Compare the two lists of integer expressions A and B.  Guarantee
+# exactly one expansion of both lists' side effects.
 #
-# Compare the two lists of integer expressions A and B.  For instance:
+# For instance:
 #   m4_list_cmp([1, 0],     [1])    ->  0
 #   m4_list_cmp([1, 0],     [1, 0]) ->  0
 #   m4_list_cmp([1, 2],     [1, 0]) ->  1
@@ -2771,31 +2699,9 @@ m4_define([m4_cmp],
 #   m4_define([xa], [oops])dnl
 #   m4_list_cmp([[0xa]],    [5+5])  -> 0
 #
-# Rather than face the overhead of m4_case, we use a helper function whose
-# expansion includes the name of the macro to invoke on the tail, either
-# m4_ignore or m4_unquote.  This is particularly useful when comparing
-# long lists, since less text is being expanded for deciding when to end
-# recursion.  The recursion is between a pair of macros that alternate
-# which list is trimmed by one element; this is more efficient than
-# calling m4_cdr on both lists from a single macro.  Guarantee exactly
-# one expansion of both lists' side effects.
-#
-# Please keep foreach.m4 in sync with any adjustments made here.
+# _m4_list_cmp_raw has multiple definitions, see foreach.m4 and recursive.m4.
 m4_define([m4_list_cmp],
 [_$0_raw(m4_dquote($1), m4_dquote($2))])
-
-m4_define([_m4_list_cmp_raw],
-[m4_if([$1], [$2], [0], [_m4_list_cmp_1([$1], $2)])])
-
-m4_define([_m4_list_cmp],
-[m4_if([$1], [], [0m4_ignore], [$2], [0], [m4_unquote], [$2m4_ignore])])
-
-m4_define([_m4_list_cmp_1],
-[_m4_list_cmp_2([$2], [m4_shift2($@)], $1)])
-
-m4_define([_m4_list_cmp_2],
-[_m4_list_cmp([$1$3], m4_cmp([$3+0], [$1+0]))(
-  [_m4_list_cmp_1(m4_dquote(m4_shift3($@)), $2)])])
 
 # m4_max(EXPR, ...)
 # m4_min(EXPR, ...)
@@ -2803,11 +2709,12 @@ m4_define([_m4_list_cmp_2],
 # Return the decimal value of the maximum (or minimum) in a series of
 # integer expressions.
 #
-# M4 1.4.x doesn't provide ?:.  Hence this huge m4_eval.  Avoid m4_eval
-# if both arguments are identical, but be aware of m4_max(0xa, 10) (hence
-# the use of <=, not just <, in the second multiply).
+# Calls with only one or two arguments short-circuit the iteration.
+# Calls with two _textually_ identical arguments can avoid m4_eval.
+# The _$0 trick allows both entry points to have the same definition.
 #
-# Please keep foreach.m4 in sync with any adjustments made here.
+# _m4_minmax has multiple definitions, see foreach.m4 and recursive.m4.
+# Both rely on _m4_max and _m4_min, defined below.
 m4_define([m4_max],
 [m4_if([$#], [0], [m4_fatal([too few arguments to $0])],
        [$#], [1], [m4_eval([$1])],
@@ -2815,28 +2722,24 @@ m4_define([m4_max],
        [$#], [2], [_$0($@)],
        [_m4_minmax([_$0], $@)])])
 
+m4_copy([m4_max], [m4_min])
+
+# _m4_max(EXPR1, EXPR2)
+# _m4_min(EXPR1, EXPR2)
+# ---------------------
+# Return the decimal value of the maximum (minimum) of EXPR1 and EXPR2.
+# Called by m4_max/m4_min, respectively, via _m4_minmax.
+#
+# M4 1.4.x's eval() doesn't recognize ? : so we have to fake it with
+# arithmetic.  The arguments could be numerically but not textually
+# equal, e.g. _m4_max(10, 0xA), so the second multiply uses <=.
+# (Also, the textually-identical shortcut is only used when
+# m4_max/m4_min were called with exactly two arguments.)
 m4_define([_m4_max],
 [m4_eval((([$1]) > ([$2])) * ([$1]) + (([$1]) <= ([$2])) * ([$2]))])
 
-m4_define([m4_min],
-[m4_if([$#], [0], [m4_fatal([too few arguments to $0])],
-       [$#], [1], [m4_eval([$1])],
-       [$#$1], [2$2], [m4_eval([$1])],
-       [$#], [2], [_$0($@)],
-       [_m4_minmax([_$0], $@)])])
-
 m4_define([_m4_min],
 [m4_eval((([$1]) < ([$2])) * ([$1]) + (([$1]) >= ([$2])) * ([$2]))])
-
-# _m4_minmax(METHOD, ARG1, ARG2...)
-# ---------------------------------
-# Common recursion code for m4_max and m4_min.  METHOD must be _m4_max
-# or _m4_min, and there must be at least two arguments to combine.
-#
-# Please keep foreach.m4 in sync with any adjustments made here.
-m4_define([_m4_minmax],
-[m4_if([$#], [3], [$1([$2], [$3])],
-       [$0([$1], $1([$2], [$3]), m4_shift3($@))])])
 
 
 # m4_sign(A)
@@ -2973,6 +2876,10 @@ m4_ifdef([m4_PACKAGE_VERSION],
 # Expand IF-UNIQ on the first addition, and IF-DUP if it is already in
 # the set.
 #
+# We do not want to add a duplicate for a previously deleted but
+# unpruned element, but it is just as easy to check existence directly
+# as it is to query _m4_set_cleanup($1).
+#
 # Three cases must be handled:
 #  - _m4_set([$1],$2) is not defined:
 #      define _m4_set([$1],$2) to 1, push $2 as a definition of _m4_set([$1]),
@@ -3007,10 +2914,6 @@ m4_define([_m4_set_add_clean],
 # Add VALUE as an element of SET.  Expand IF-UNIQ on the first
 # addition, and IF-DUP if it is already in the set.  Addition of one
 # element is O(1), such that overall set creation is O(n).
-#
-# We do not want to add a duplicate for a previously deleted but
-# unpruned element, but it is just as easy to check existence directly
-# as it is to query _m4_set_cleanup($1).
 m4_define([m4_set_add],
 [_m4_set_add([$1], [$2], [_m4_set_size([$1], [m4_incr])$3], [$4])])
 
@@ -3019,27 +2922,14 @@ m4_define([m4_set_add],
 # Add each VALUE into SET.  This is O(n) in the number of VALUEs, and
 # can be faster than calling m4_set_add for each VALUE.
 #
-# Implement two recursion helpers; the check variant is slower but
-# handles the case where an element has previously been removed but
-# not pruned.  The recursion helpers ignore their second argument, so
-# that we can use the faster m4_shift2 and 2 arguments, rather than
-# _m4_shift2 and one argument, as the signal to end recursion.
-#
-# Please keep foreach.m4 in sync with any adjustments made here.
+# _m4_set_add_all_clean and _m4_set_add_all_check have multiple
+# definitions, see foreach.m4 and recursive.m4.
 m4_define([m4_set_add_all],
 [m4_case([$#], [0], [], [1], [],
   [m4_define([_m4_set_size($1)],
     m4_eval(m4_set_size([$1])
     + m4_len(m4_ifdef([_m4_set_cleanup($1)],
                       [_$0_check], [_$0_clean])([$1], $@))))])])
-
-m4_define([_m4_set_add_all_clean],
-[m4_if([$#], [2], [],
-  [_m4_set_add_clean([$1], [$3], [-], [])$0([$1], m4_shift2($@))])])
-
-m4_define([_m4_set_add_all_check],
-[m4_if([$#], [2], [],
-  [_m4_set_add([$1], [$3], [-], [])$0([$1], m4_shift2($@))])])
 
 # m4_set_contains(SET, VALUE, [IF-PRESENT], [IF-ABSENT])
 # ------------------------------------------------------
@@ -3294,6 +3184,21 @@ m4_define([_m4_set_union],
 ## 16. Setting up M4sugar.  ##
 ## ------------------------ ##
 
+# All of our macros that iterate over $@ have two implementations.
+# The implementations in foreach.m4 avoid recursing over $@, which is
+# necessary to avoid quadratic space and time consumption in GNU M4
+# 1.4.x.  The implementations in recursive.m4 are simpler, more
+# portable, and, if used with a M4 implementation where recursion
+# over $@ doesn't have quadratic costs, more efficent.  GNU M4 1.6.x
+# will be such an implementation.
+#
+# However, as of 2024, there has not yet been any official release
+# from the M4 1.6.x development effort.  Therefore, the foreach.m4
+# implementation is the default, and the one baked into freeze files.
+# m4_init will replace it with the recursive.m4 implementation if it
+# detects use of M4 1.6.x.
+m4_include([m4sugar/foreach.m4])
+
 # _m4_divert_diversion should be defined.
 m4_divert_push([KILL])
 
@@ -3307,25 +3212,35 @@ m4_pattern_forbid([^_?m4_])
 m4_pattern_forbid([^dnl$])
 
 # If __m4_version__ is defined, we assume that we are being run by M4
-# 1.6 or newer, thus $@ recursion is linear, and debugmode(+do)
-# is available for faster checks of dereferencing undefined macros
-# and forcing dumpdef to print to stderr regardless of debugfile.
-# But if it is missing, we assume we are being run by M4 1.4.x, that
-# $@ recursion is quadratic, and that we need foreach-based
-# replacement macros.  Also, m4 prior to 1.4.8 loses track of location
-# during m4wrap text; __line__ should never be 0.
+# 1.6.x or newer, meaning:
+# - debugmode([+do]) can be used, which means our wrappers around
+#   the primitive m4_defn, m4_dumpdef, m4_popdef, and m4_undefine
+#   are unnecessary
+# - recursive iteration over $@ is efficient
 #
-# Use the raw builtin to avoid tripping up include tracing.
-# Meanwhile, avoid m4_copy, since it temporarily undefines m4_defn.
+# For testing purposes, the choice of iteration implementation can
+# be overridden by defining the macro __m4sugar_use_iteration with
+# value 'foreach' or 'recursive'.  Autom4te exposes this via
+# --language variants; see autom4te.cfg, or lib/autom4te.in if you're
+# looking at the source tree.
+#
+# Use the raw include builtin to avoid tripping up include tracing.
+# Can't use m4_copy, since it temporarily undefines m4_defn.
 m4_ifdef([__m4_version__],
 [m4_debugmode([+do])
 m4_define([m4_defn], _m4_defn([_m4_defn]))
 m4_define([m4_dumpdef], _m4_defn([_m4_dumpdef]))
 m4_define([m4_popdef], _m4_defn([_m4_popdef]))
-m4_define([m4_undefine], _m4_defn([_m4_undefine]))],
-[m4_builtin([include], [m4sugar/foreach.m4])
-m4_wrap_lifo([m4_if(__line__, [0], [m4_pushdef([m4_location],
-]]m4_dquote(m4_dquote(m4_dquote(__file__:__line__)))[[)])])])
+m4_define([m4_undefine], _m4_defn([_m4_undefine]))
+m4_define_default([__m4sugar_use_iteration], [recursive])],
+[# M4 1.4.x
+m4_define_default([__m4sugar_use_iteration], [foreach])])
+m4_case(m4_defn([__m4sugar_use_iteration]),
+  [recursive], [m4_builtin([include], [m4sugar/recursive.m4])],
+  [foreach],   [],
+    [m4_fatal(m4_join([ ],
+      [bad value for __m4sugar_use_iteration:],
+      m4_defn([__m4sugar_use_iteration])))])
 
 # Rewrite the first entry of the diversion stack.
 m4_divert([KILL])

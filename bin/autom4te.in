@@ -181,6 +181,10 @@ Library directories:
   -B, --prepend-include=DIR  prepend directory DIR to search path
   -I, --include=DIR          append directory DIR to search path
 
+Macro adjustments:
+  -D, --define=MACRO[=VALUE]  define MACRO to VALUE, or empty
+  -U, --undefine=MACRO        undefine MACRO
+
 Tracing:
   -t, --trace=MACRO[:FORMAT]  report the MACRO invocations
   -p, --preselect=MACRO       prepare to trace MACRO in a future run
@@ -288,7 +292,7 @@ sub files_to_options (@)
   foreach my $file (@file)
     {
       my $arg = shell_quote ($file);
-      if ($file =~ /\.m4f$/)
+      if ($file !~ /^-/ && $file =~ /\.m4f$/)
 	{
 	  $arg = "--reload-state=$arg";
 	  # If the user downgraded M4 from 1.6 to 1.4.x after freezing
@@ -474,10 +478,36 @@ Try '$me --help' for more information."
   # files, so we use 'find_file' here.  Try to get a canonical name,
   # as it's part of the key for caching.  And some files are optional
   # (also handled by 'find_file').
+  #
+  # -D/--define and -U/--undefine options are left in @ARGV because
+  # their relative order with actual files must be preserved;
+  # canonicalize and quote them here.
   my @argv;
+  my $expecting = "";
   foreach (@ARGV)
     {
-      if ($_ eq '-')
+      if ($expecting)
+	{
+	  push @argv, "${expecting}=$_";
+	  $expecting = "";
+	}
+      elsif (/^-(?:D=?|-define=)(.*)$/)
+	{
+	  push @argv, "--define=$1";
+	}
+      elsif (/^-(?:D|define)/)
+	{
+	  $expecting = "--define";
+	}
+      elsif (/^-(?:U=?|-undefine=)(.*)$/)
+	{
+	  push @argv, "--define=$1"
+	}
+      elsif (/^-(?:U|-undefine)/)
+	{
+	  $expecting = "--undefine";
+	}
+      elsif ($_ eq '-')
 	{
 	  push @argv, $_;
 	}
@@ -502,6 +532,10 @@ Try '$me --help' for more information."
 	    if $file;
 	}
     }
+
+  fatal "option '$expecting' requires an argument"
+    if $expecting;
+
   @ARGV = @argv;
 }
 

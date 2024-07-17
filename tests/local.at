@@ -152,6 +152,20 @@ AS_CASE(["`AS_ECHO(["$at_autopoint_version_1"]) | sed 's/^.*) *//'`"],
     [at_autopoint_modern=:],
     [at_autopoint_modern=false])
 
+# Using the same test that m4sugar.m4 uses, guess whether the
+# iteration macros in m4sugar/recursive.m4 will be quadratically
+# expensive.  The variable storing the result of this test is called
+# "at_mfour_slow_recursion" so we don't have to write an @&t@ in the
+# middle of it every time we use it.  When using this, keep in mind
+# that the fifth argument to AT_CHECK_M4SUGAR cannot be a shell variable.
+# See m4sugar.at's pairs of "foreach/default" and "recursive" tests for
+# how to deal with this constraint.
+if test x"`echo __m4@&t@_version__ | $M4`" = x__m4@&t@_version__; then
+  at_mfour_slow_recursion=:
+else
+  at_mfour_slow_recursion=false
+fi
+
 # Determine how long we need to delay in between operations that might
 # modify autom4te.cache.  This depends on three factors: whether the
 # 'sleep' utility supports fractional seconds in its argument; what
@@ -281,6 +295,11 @@ if test x"$AUTOPOINT" != xfalse; then
   AS_ECHO(["$at_srcdir/AT_LINE: $AUTOPOINT $at_autopoint_status"])
 fi
 
+if $at_mfour_slow_recursion; then
+  AS_ECHO(["$at_srcdir/AT_LINE: M4 recursion over \$@ is believed to be slow"])
+else
+  AS_ECHO(["$at_srcdir/AT_LINE: M4 recursion over \$@ is believed to be fast"])
+fi
 echo
 exit $status
 ) >&AS_MESSAGE_LOG_FD 2>&1
@@ -503,13 +522,103 @@ m4_define([AT_DATA_M4SUGAR],
               [\1\3\5@&t@\2\4\6])])])
 
 
-# AT_CHECK_M4SUGAR(FLAGS, [EXIT-STATUS = 0], STDOUT, STDERR)
-# ----------------------------------------------------------
+# AT_CHECK_M4SUGAR(FLAGS, EXIT-STATUS = 0, STDOUT, STDERR,
+#                  [VARIANTS = recursive foreach])
+# --------------------------------------------------------
+# VARIANTS must be a space-separated list of one or more of 'default',
+# 'recursive', 'foreach'.  Run autom4te on 'script.4s' for each variant,
+# supplying FLAGS as additional command line flags.  Expect the specified
+# exit status, stdout, and stderr from each variant.  In addition, the
+# generated file 'script' must be identical for each tested variant.
+#
+# Implementation note: since there are only three variants and we need
+# to do stuff in between AT_CHECK_AUTOM4TE invocations depending on which
+# variants are enabled, it's easiest to not try to use a loop.
 m4_define([AT_CHECK_M4SUGAR],
-[AT_KEYWORDS([m4sugar])
-AT_CHECK_AUTOM4TE([--language=m4sugar script.4s -o script $1],
-	           [$2], [$3], [$4])])
+[AT_KEYWORDS([m4sugar])]dnl
+[_$0([$1], [$2], [$3], [$4], m4_default([$5], [recursive foreach]))])
 
+# _AT_CHECK_M4SUGAR(FLAGS, EXIT-STATUS, STDOUT, STDERR, VARIANTS)
+m4_define([_AT_CHECK_M4SUGAR],
+[m4_bmatch([$3], [\(ignore\|stdout\|expout\)\(-nolog\)?], [],
+  [AT_DATA([expout], [$3])
+])]dnl
+[m4_bmatch([$4], [\(ignore\|stderr\|experr\)\(-nolog\)?], [],
+  [AT_DATA([experr], [$4])
+])]dnl
+[_$0(m4_bmatch([$5], [\<recursive\>], [recursive], []),
+  m4_bmatch([$5], [\<foreach\>], [foreach], []),
+  m4_bmatch([$5], [\<default\>], [default], []),
+  [$1],
+  [$2],
+  m4_bmatch([$3], [\(ignore\|stdout\|expout\)\(-nolog\)?], [$3], [expout]),
+  m4_bmatch([$4], [\(ignore\|stderr\|experr\)\(-nolog\)?], [$4], [experr]))])
+
+# __AT_CHECK_M4SUGAR(
+#   $1 = TEST-RECURSIVE,
+#   $2 = TEST-FOREACH,
+#   $3 = TEST-DEFAULT,
+#   $4 = FLAGS,
+#   $5 = EXIT-STATUS = 0,
+#   $6 = STDOUT,
+#   $7 = STDERR
+# )
+m4_define([__AT_CHECK_M4SUGAR],
+[m4_ifnblank([$1],
+[AT_CHECK_AUTOM4TE(
+  [--language=m4sugar-recursive-iteration $4 script.4s -o script],
+  [$5], [$6], [$7])
+m4_ifnblank([$2$3],
+[for f in script stdout stdout-raw stderr stderr-raw; do
+  if test -f $f; then mv $f ${f}.ri; fi
+done
+])])]dnl
+[m4_ifnblank([$2],
+[AT_CHECK_AUTOM4TE(
+  [--language=m4sugar-foreach-iteration $4 script.4s -o script],
+  [$5], [$6], [$7])
+m4_ifnblank([$1],
+[for f in script stdout stderr; do
+  if test -f $f; then
+    AT_CHECK([$at_diff ${f}.ri $f],
+             [], [ignore], [ignore])
+  fi
+done
+])m4_ifnblank([$3],
+[for f in script stdout stdout-raw stderr stderr-raw; do
+  if test -f $f; then mv $f ${f}.fi; fi
+done
+])])]dnl
+[m4_ifnblank([$3],
+[AT_CHECK_AUTOM4TE(
+  [--language=m4sugar $4 script.4s -o script],
+  [$5], [$6], [$7])
+m4_ifnblank([$1$2],
+[for f in script stdout stderr; do
+  if test -f $f; then
+    AT_CHECK([$at_diff ${f}.m4_ifnblank([$1], [ri], [fi]) $f],
+             [0], [ignore], [ignore])
+  fi
+done
+])])])
+
+
+# AT_CHECK_M4SUGAR_TEXT(CODE, STDOUT, STDERR, FLAGS,
+#                       [VARIANTS = recursive foreach])
+# -----------------------------------------------------
+# Check that m4sugar CODE expands to STDOUT and emits STDERR.
+# All other arguments are as for AT_CHECK_M4SUGAR.
+m4_define([AT_CHECK_M4SUGAR_TEXT],
+[AT_DATA([expscript], [$2])
+AT_DATA_M4SUGAR([script.4s],
+[[m4_init
+m4_divert_push([])[]dnl
+]$1[[]dnl
+m4_divert_pop([])
+]])
+AT_CHECK_M4SUGAR([$4], [0], [], [$3], [$5])
+AT_CHECK([$at_diff expscript script], [0], [ignore], [ignore])
+])
 
 
 ## -------------- ##

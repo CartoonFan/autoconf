@@ -19,22 +19,6 @@ AT_BANNER([M4sugar.])
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 
-# AT_CHECK_M4SUGAR_TEXT(CODE, STDOUT, STDERR, FLAGS)
-# --------------------------------------------------
-# Check that m4sugar CODE expands to STDOUT and emits STDERR.
-m4_define([AT_CHECK_M4SUGAR_TEXT],
-[
-AT_DATA_M4SUGAR([script.4s],
-[[m4_init
-m4_divert_push([])[]dnl
-]$1[[]dnl
-m4_divert_pop([])
-]])
-
-AT_CHECK_M4SUGAR([$4 -o-],, [$2], [$3])
-])# AT_CHECK_M4SUGAR_TEXT
-
-
 ## ------------------ ##
 ## m4_stack_foreach.  ##
 ## ------------------ ##
@@ -113,35 +97,39 @@ AT_DATA_M4SUGAR([script.4s],
 m4_defn([good], [oops])
 ]])
 
-AT_CHECK_M4SUGAR([-o-], 1, [], [stderr])
+AT_CHECK_M4SUGAR([], 1, [], [stderr])
 AT_CHECK([grep good stderr], [1])
 AT_CHECK([grep 'm4@&t@_defn: undefined.*oops' stderr], [0], [ignore])
+AT_CHECK([if test -f script; then exit 1; fi])
 
 AT_DATA_M4SUGAR([script.4s],
 [[m4_define([good])
 m4_popdef([good], [oops])
 ]])
 
-AT_CHECK_M4SUGAR([-o-], 1, [], [stderr])
+AT_CHECK_M4SUGAR([], 1, [], [stderr])
 AT_CHECK([grep good stderr], [1])
 AT_CHECK([grep 'm4@&t@_popdef: undefined.*oops' stderr], [0], [ignore])
+AT_CHECK([if test -f script; then exit 1; fi])
 
 AT_DATA_M4SUGAR([script.4s],
 [[m4_define([good])
 m4_undefine([good], [oops])
 ]])
 
-AT_CHECK_M4SUGAR([-o-], 1, [], [stderr])
+AT_CHECK_M4SUGAR([], 1, [], [stderr])
 AT_CHECK([grep good stderr], [1])
 AT_CHECK([grep 'm4@&t@_undefine: undefined.*oops' stderr], [0], [ignore])
+AT_CHECK([if test -f script; then exit 1; fi])
 
 # Cannot rename an undefined macro.
 AT_DATA_M4SUGAR([script.4s],
 [[m4_rename([oops], [good])
 ]])
 
-AT_CHECK_M4SUGAR([-o-], 1, [], [stderr])
+AT_CHECK_M4SUGAR([], 1, [], [stderr])
 AT_CHECK([grep 'm4@&t@_undefine: undefined.*oops' stderr], [0], [ignore])
+AT_CHECK([if test -f script; then exit 1; fi])
 
 # Check that pushdef stacks can be renamed.
 AT_CHECK_M4SUGAR_TEXT([[m4_pushdef([a], [1])dnl
@@ -195,9 +183,10 @@ AT_DATA_M4SUGAR([script.4s],
 m4_dumpdef([good], [oops])
 ]])
 
-AT_CHECK_M4SUGAR([-o-], 1, [], [stderr])
+AT_CHECK_M4SUGAR([], 1, [], [stderr])
 AT_CHECK([grep '^good:	\[[yep]]$' stderr], [0], [ignore])
 AT_CHECK([grep 'm4@&t@_dumpdef: undefined.*oops' stderr], [0], [ignore])
+AT_CHECK([if test -f script; then exit 1; fi])
 
 # Check that pushdef stacks can be dumped.
 AT_CHECK_M4SUGAR_TEXT([[m4_divert_push([KILL])
@@ -1136,16 +1125,14 @@ one, two, three
 1 2 3
 ]])
 
-AT_DATA_M4SUGAR([script.4s],
-[[m4_init[]dnl
-m4_append_uniq([str], [a], [ ])
-m4_append_uniq([str], [a b], [ ])
-m4_divert([])dnl
+AT_CHECK_M4SUGAR_TEXT([[dnl
+m4_append_uniq([str], [a], [ ])dnl
+m4_append_uniq([str], [a b], [ ])dnl
 str
-]])
-
-AT_CHECK_M4SUGAR([-o-], 0, [[a a b
-]], [[script.4s:3: warning: m4@&t@_append_uniq: 'a b' contains ' '
+]],
+[[a a b
+]],
+[[script.4s:5: warning: m4@&t@_append_uniq: 'a b' contains ' '
 ]])
 
 AT_CLEANUP
@@ -1328,9 +1315,8 @@ AT_KEYWORDS([m4@&t@_escape])
 # commas and $ are not swallowed.  This can easily happen because of
 # m4-listification.
 
-AT_DATA_M4SUGAR([script.4s],
-[[m4_init[]m4_divert([])dnl
-m4_define([a], [OOPS])dnl
+AT_CHECK_M4SUGAR_TEXT(
+[[m4_define([a], [OOPS])dnl
 m4_escape([a[b $c#]d])
 m4_if(m4_escape([a[b $c#]d]), [a[b $c#]d], [oops],
       m4_escape([a[b $c#]d]), [a@<:@b @S|@c@%:@@:>@d], [pass], [oops])
@@ -1348,9 +1334,7 @@ m4_text_wrap([Super long documentation.], [          ], [  --too-wide], 30)
 m4_text_wrap([First, second  , third, [,quoted  space]])
 m4_define([xfff], [oops])
 m4_text_wrap([Some $1 $2 $3 $4 embedded dollars.], [ $* ], [ $@ ], [0xfff & 20])
-]])
-
-AT_DATA([expout],
+]],
 [[a[b $c#]d
 pass
 
@@ -1374,8 +1358,6 @@ First, second , third, [,quoted space]
  $* $4 embedded
  $* dollars.
 ]])
-
-AT_CHECK_M4SUGAR([-o-], 0, [expout])
 
 AT_CLEANUP
 
@@ -2001,115 +1983,73 @@ AT_CLEANUP
 ## Recursion.  ##
 ## ----------- ##
 
-AT_SETUP([recursion])
+# This script and its expected output are used in the next two tests.
+m4_define([m4st_long_iteration_script],
+[[m4_len(m4_foreach_w([j], m4_do(m4_for([i], [1], [10000], [], [,i ])), [j ]))
+m4_shiftn(9998m4_for([i], [1], [10000], [], [,i]))
+m4_len(m4_join([--],, m4_dquote_elt(m4_for([i], [1], [10000], [], [,i])),))
+m4_len(m4_joinall([--], m4_map([, m4_echo],
+  m4_dquote([1]m4_for([i], [2], [10000], [], [,i])))))
+m4_max(m4_min([1]m4_for([i], [2], [10000], [],
+  [,i]))m4_for([i], [2], [10000], [], [,i]))
+m4_case([10000]m4_for([i], [1], [10000], [], [,i]),[end])
+m4_list_cmp(m4_dquote(1m4_for([i], [2], [10000], [], [,i])),
+  m4_dquote(m4_reverse(10000m4_for([i], [9999], [1], [], [,i])), [0]))
+m4_list_cmp([0], [0m4_for([i], [1], [10000], [], [,0])])
+m4_list_cmp([0m4_for([i], [1], [10000], [], [,0])], [0])
+m4_for([i], [1], [10000], [], [m4_define(i)])dnl
+m4_undefine(1m4_for([i], [2], [10000], [], [,i]))dnl
+m4_bpatsubsts([a1]m4_for([i], [1], [10000], [], [,i]), [a2], [A])
+m4_bmatch([9997]m4_for([i], [1], [10000], [], [,^i$]))
+m4_define([up], [m4_define([$1], m4_incr($1))$1])m4_define([j], 0)dnl
+m4_cond(m4_for([i], [1], [10000], [], [[up([j])], [9990], i,]) [oops]) j
+m4_count(m4_map_args_pair([,m4_quote], []m4_map_args([,m4_echo]m4_for([i],
+  [1], [10000], [], [,i]))))
+]])
+
+m4_define([m4st_long_iteration_output],
+[[48894
+9999,10000
+78896
+58894
+10000
+end
+0
+0
+0
+A
+^9998$
+9990 9990
+5001
+]])
+
+AT_SETUP([iteration macros, long lists (foreach/default)])
 
 AT_KEYWORDS([m4@&t@_foreach m4@&t@_foreach_w m4@&t@_case m4@&t@_cond
 m4@&t@_bpatsubsts m4@&t@_shiftn m4@&t@_do m4@&t@_dquote_elt m4@&t@_reverse
 m4@&t@_map m4@&t@_join m4@&t@_joinall m4@&t@_list_cmp m4@&t@_max m4@&t@_min
 m4@&t@_bmatch m4@&t@_map_args m4@&t@_map_args_pair])
 
+dnl Test the foreach-based iteration macros unconditionally.
+dnl Also test that the default version is efficient.
+AT_CHECK_M4SUGAR_TEXT(
+m4_defn([m4st_long_iteration_script]),
+m4_defn([m4st_long_iteration_output]),
+[], [], [foreach default])
+
+AT_CLEANUP
+
+AT_SETUP([iteration macros, long lists (recursive)])
+
 dnl This test completes in a reasonable time if m4_foreach is linear,
-dnl but thrashes if it is quadratic.  If we are testing with m4 1.4.x,
-dnl only the slower foreach.m4 implementation will work.  But if we
-dnl are testing with m4 1.6, we can rerun the test with __m4_version__
-dnl undefined to exercise the alternate code path.
-AT_DATA_M4SUGAR([script.4s],
-[[m4_init
-m4_divert_push([])[]dnl
-m4_len(m4_foreach_w([j], m4_do(m4_for([i], [1], [10000], [], [,i ])), [j ]))
-m4_shiftn(9998m4_for([i], [1], [10000], [], [,i]))
-m4_len(m4_join([--],, m4_dquote_elt(m4_for([i], [1], [10000], [], [,i])),))
-m4_len(m4_joinall([--], m4_map([, m4_echo],
-  m4_dquote([1]m4_for([i], [2], [10000], [], [,i])))))
-m4_max(m4_min([1]m4_for([i], [2], [10000], [],
-  [,i]))m4_for([i], [2], [10000], [], [,i]))
-m4_case([10000]m4_for([i], [1], [10000], [], [,i]),[end])
-m4_list_cmp(m4_dquote(1m4_for([i], [2], [10000], [], [,i])),
-  m4_dquote(m4_reverse(10000m4_for([i], [9999], [1], [], [,i])), [0]))
-m4_list_cmp([0], [0m4_for([i], [1], [10000], [], [,0])])
-m4_list_cmp([0m4_for([i], [1], [10000], [], [,0])], [0])
-m4_for([i], [1], [10000], [], [m4_define(i)])dnl
-m4_undefine(1m4_for([i], [2], [10000], [], [,i]))dnl
-m4_bpatsubsts([a1]m4_for([i], [1], [10000], [], [,i]), [a2], [A])
-m4_bmatch([9997]m4_for([i], [1], [10000], [], [,^i$]))
-m4_define([up], [m4_define([$1], m4_incr($1))$1])m4_define([j], 0)dnl
-m4_cond(m4_for([i], [1], [10000], [], [[up([j])], [9990], i,]) [oops]) j
-m4_count(m4_map_args_pair([,m4_quote], []m4_map_args([,m4_echo]m4_for([i],
-  [1], [10000], [], [,i]))))
-m4_divert_pop([])
-]])
+dnl but thrashes if it is quadratic. (2018 workstation: completes after
+dnl five minutes.)  Do not test the recursive version unless we have M4 1.6.x.
+AT_SKIP_IF([$at_mfour_slow_recursion])
 
-AT_CHECK_M4SUGAR([-o-], [0], [[48894
-9999,10000
-78896
-58894
-10000
-end
-0
-0
-0
-A
-^9998$
-9990 9990
-5001
-]])
-
-AT_DATA_M4SUGAR([script.4s],
-[[m4_ifdef([__m4_version__],
-[m4_undefine([__m4_version__])],
-[m4_divert_push([])48894
-9999,10000
-78896
-58894
-10000
-end
-0
-0
-0
-A
-^9998$
-9990 9990
-5001
-m4_exit([0])])
-m4_init
-m4_divert_push([])[]dnl
-m4_len(m4_foreach_w([j], m4_do(m4_for([i], [1], [10000], [], [,i ])), [j ]))
-m4_shiftn(9998m4_for([i], [1], [10000], [], [,i]))
-m4_len(m4_join([--],, m4_dquote_elt(m4_for([i], [1], [10000], [], [,i])),))
-m4_len(m4_joinall([--], m4_map([, m4_echo],
-  m4_dquote([1]m4_for([i], [2], [10000], [], [,i])))))
-m4_max(m4_min([1]m4_for([i], [2], [10000], [],
-  [,i]))m4_for([i], [2], [10000], [], [,i]))
-m4_case([10000]m4_for([i], [1], [10000], [], [,i]),[end])
-m4_list_cmp(m4_dquote(1m4_for([i], [2], [10000], [], [,i])),
-  m4_dquote(m4_reverse(10000m4_for([i], [9999], [1], [], [,i])), [0]))
-m4_list_cmp([0], [0m4_for([i], [1], [10000], [], [,0])])
-m4_list_cmp([0m4_for([i], [1], [10000], [], [,0])], [0])
-m4_for([i], [1], [10000], [], [m4_define(i)])dnl
-m4_undefine(1m4_for([i], [2], [10000], [], [,i]))dnl
-m4_bpatsubsts([a1]m4_for([i], [1], [10000], [], [,i]), [a2], [A])
-m4_bmatch([9997]m4_for([i], [1], [10000], [], [,^i$]))
-m4_define([up], [m4_define([$1], m4_incr($1))$1])m4_define([j], 0)dnl
-m4_cond(m4_for([i], [1], [10000], [], [[up([j])], [9990], i,]) [oops]) j
-m4_count(m4_map_args_pair([,m4_quote], []m4_map_args([,m4_echo]m4_for([i],
-  [1], [10000], [], [,i]))))
-m4_divert_pop([])
-]])
-
-AT_CHECK_M4SUGAR([-o-], [0], [[48894
-9999,10000
-78896
-58894
-10000
-end
-0
-0
-0
-A
-^9998$
-9990 9990
-5001
-]])
+AT_CHECK_M4SUGAR_TEXT(
+m4_defn([m4st_long_iteration_script]),
+m4_defn([m4st_long_iteration_output]),
+[], [], [recursive])
 
 AT_CLEANUP
 
@@ -2237,30 +2177,6 @@ yes
 :,,::,a:
 ]])
 
-# Stress tests - check for linear scaling (won't necessarily fail if
-# quadratic, but hopefully users will complain if it appears to hang)
-AT_CHECK_M4SUGAR_TEXT([[dnl
-m4_for([i], [1], [10000], [], [m4_set_add([a], i)])dnl
-m4_set_add_all([b]m4_for([i], [1], [10000], [], [,i]))dnl
-m4_set_remove([a], [1])dnl
-m4_set_remove([b], [10000])dnl
-m4_set_add_all([a]m4_for([i], [1], [10000], [], [,i]))dnl
-m4_for([i], [1], [10000], [], [m4_set_add([b], i)])dnl
-m4_len(m4_set_contents([a]))
-m4_len(m4_set_foreach([b], [b], [m4_if(m4_eval(b & 1), [1],
-  [m4_set_remove([b], b, [-])])]))
-m4_set_size([b])
-m4_define([prune3x], [m4_if(m4_eval([$1 % 3]), [0],
-  [m4_set_remove([a], [$1], [-])])])dnl
-m4_len(m4_set_map([a], [prune3x]))
-m4_count(m4_shift(m4_set_intersection([a], [b])))
-]], [[38894
-5000
-5000
-3333
-3334
-]])
-
 # Implementation corner cases.
 
 # m4_set_add_all dispatches to one of two different helper macros
@@ -2313,6 +2229,69 @@ m4_set_dump([c], [,])
 1,2,3,4,5,6,,
 6,5,4,3,2,1
 ]])
+
+AT_CLEANUP
+
+# This script and its expected output are used in the next two tests.
+m4_define([m4st_set_stress_script],
+[[dnl
+m4_for([i], [1], [10000], [], [m4_set_add([a], i)])dnl
+m4_set_add_all([b]m4_for([i], [1], [10000], [], [,i]))dnl
+m4_set_remove([a], [1])dnl
+m4_set_remove([b], [10000])dnl
+m4_set_add_all([a]m4_for([i], [1], [10000], [], [,i]))dnl
+m4_for([i], [1], [10000], [], [m4_set_add([b], i)])dnl
+m4_len(m4_set_contents([a]))
+m4_len(m4_set_foreach([b], [b], [m4_if(m4_eval(b & 1), [1],
+  [m4_set_remove([b], b, [-])])]))
+m4_set_size([b])
+m4_define([prune3x], [m4_if(m4_eval([$1 % 3]), [0],
+  [m4_set_remove([a], [$1], [-])])])dnl
+m4_len(m4_set_map([a], [prune3x]))
+m4_count(m4_shift(m4_set_intersection([a], [b])))
+]])
+
+m4_define([m4st_set_stress_output],
+[[38894
+5000
+5000
+3333
+3334
+]])
+
+AT_SETUP([m4@&t@_set stress test (foreach/default)])
+
+AT_KEYWORDS([m4@&t@_set_add_all m4@&t@_set_remove m4@&t@_set_contents
+m4@&t@_set_foreach m4@&t@_set_size m4@&t@_set_map
+m4@&t@_set_intersection])
+
+# Stress tests - check for linear scaling (won't necessarily fail if
+# quadratic, but hopefully users will complain if it appears to hang)
+# Test the foreach-based iteration macros unconditionally.
+# Also test that the default version is efficient.
+
+AT_CHECK_M4SUGAR_TEXT(
+m4_defn([m4st_set_stress_script]),
+m4_defn([m4st_set_stress_output]),
+[], [], [foreach default])
+
+AT_CLEANUP
+
+AT_SETUP([m4@&t@_set stress test (recursive)])
+
+AT_KEYWORDS([m4@&t@_set_add_all m4@&t@_set_remove m4@&t@_set_contents
+m4@&t@_set_foreach m4@&t@_set_size m4@&t@_set_map
+m4@&t@_set_intersection])
+
+# This test completes in a reasonable time if m4_foreach is linear,
+# but thrashes if it is quadratic.  (2018 workstation: completes after
+# one minute.)  Do not test the recursive version unless we have M4 1.6.x.
+AT_SKIP_IF([$at_mfour_slow_recursion])
+
+AT_CHECK_M4SUGAR_TEXT(
+m4_defn([m4st_set_stress_script]),
+m4_defn([m4st_set_stress_output]),
+[], [], [recursive])
 
 AT_CLEANUP
 

@@ -180,3 +180,25 @@ begin-language: "M4sugar"
 args: --prepend-include '@pkgdatadir@'
 args: m4sugar/m4sugar.m4f
 end-language: "M4sugar"
+
+## ---------------------------------- ##
+## M4sugar using recursive iteration, ##
+## regardless of efficiency.          ##
+## For testing purposes only.         ##
+## ---------------------------------- ##
+
+begin-language: "M4sugar-recursive-iteration"
+args: --language M4sugar
+args: -D__m4sugar_use_iteration=recursive
+end-language: "M4sugar-recursive-iteration"
+
+## ---------------------------------- ##
+## M4sugar using m4_for iteration,    ##
+## regardless of efficiency.          ##
+## For testing purposes only.         ##
+## ---------------------------------- ##
+
+begin-language: "M4sugar-foreach-iteration"
+args: --language M4sugar
+args: -D__m4sugar_use_iteration=foreach
+end-language: "M4sugar-foreach-iteration"

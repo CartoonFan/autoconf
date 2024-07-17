@@ -2,6 +2,14 @@ GNU Autoconf NEWS - User visible changes.
 
 * Noteworthy changes in release ?.? (????-??-??) [?]
 
+** New features
+
+*** autom4te now supports defining M4 macros on the command line.
+  The autom4te program now recognizes the command line options
+  --define (-D) and --undefine (-U), and passes them along to M4.
+  This feature was added for internal testing purposes but may be
+  generally useful.
+
 ** Notable bug fixes
 
 *** autoreconf now writes the generated template file to standard output

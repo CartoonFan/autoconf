@@ -11588,6 +11588,34 @@ command line, no warnings will be issued.
 Some categories of warnings are on by default.
 Again, for details see @ref{m4_warn}.
 
+@item --define=@var{macro}[=@var{value}]
+@itemx -D@var{macro}[=@var{value}]
+Define @var{macro} to expand to @var{value}.  If @var{value} is omitted,
+the macro is defined with an empty expansion.
+
+The effects of this option are visible only to files that appear after
+the option on the command line.  For instance, this command
+
+@example
+autom4te 1.m4 --define=PART=bolt 2.m4
+@end example
+
+causes the macro @code{PART} to have a definition in @file{2.m4} but not
+in @file{1.m4}.
+
+@item --undefine=@var{macro}
+@itemx -U@var{macro}
+Undefine the macro @var{macro}.  Like @option{--define}, the effects
+are visible only to files that appear after the option on the command
+line.  Continuing the previous example, this command
+
+@example
+autom4te 1.m4 --define=PART=bolt 2.m4 --undefine=PART 3.m4
+@end example
+
+causes the macro @code{PART} to have a definition in @file{2.m4} but
+not in @file{1.m4} or @file{3.m4}.
+
 @item --melt
 @itemx -M
 Do not use frozen files.  Any argument @code{@var{file}.m4f} is

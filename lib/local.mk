@@ -142,6 +142,7 @@ m4sugarlibdir = $(pkgdatadir)/m4sugar
 dist_m4sugarlib_DATA = \
   lib/m4sugar/m4sugar.m4 \
   lib/m4sugar/foreach.m4 \
+  lib/m4sugar/recursive.m4 \
   lib/m4sugar/m4sh.m4
 
 nodist_m4sugarlib_DATA = \
