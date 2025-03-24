@@ -726,6 +726,9 @@ AT_CHECK([./config.status --recheck], [], [stdout])
 AT_CHECK([grep cache stdout], [0], [ignore])
 
 # By default, configure uses no cache file, neither loading nor updating it.
+# OpenBSD 7.6 /bin/sh test builtin does not handle nanoseconds, so we
+# must sleep before writing a-stamp-file.
+AT_MTIME_DELAY
 : > a-stamp-file
 AT_CHECK_CONFIGURE([], [], [stdout])
 AT_CHECK([grep cache stdout], [1])
