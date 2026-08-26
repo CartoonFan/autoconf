@@ -3678,6 +3678,9 @@ Tell @command{autoheader} to generate a template for @var{key}.  This macro
 generates standard templates just like @code{AC_DEFINE} when a
 @var{description} is given.
 
+@var{key} must expand to a literal symbol name.  Otherwise, this macro
+has no effect and issues no diagnostic (@pxref{Defining Symbols}).
+
 For example:
 
 @example
@@ -3702,7 +3705,8 @@ justified.
 Tell @command{autoheader} to include the @var{template} as-is in the header
 template file.  This @var{template} is associated with the @var{key},
 which is used to sort all the different templates and guarantee their
-uniqueness.  It should be a symbol that can be defined via @code{AC_DEFINE}.
+uniqueness.  @var{key} must expand to a literal word.  Otherwise, this
+macro has no effect and issues no diagnostic.
 @end defmac
 
 
@@ -10141,9 +10145,17 @@ AC_DEFINE_UNQUOTED([config_machfile], ["$machfile"],
   [Configuration machine file.])
 AC_DEFINE_UNQUOTED([GETGROUPS_T], [$ac_cv_type_getgroups],
   [getgroups return type.])
-AC_DEFINE_UNQUOTED([$ac_tr_hdr], [1],
-  [Translated header name.])
+AC_DEFINE_UNQUOTED([$ac_tr_hdr], [1])
 @end example
+
+@command{autoheader} can generate a template from @var{description} only
+when @var{variable} expands to a literal symbol name.  If the name is
+computed at configure time, you must add every possible name to the input
+template when using @code{AC_CONFIG_HEADERS}.  Use @code{AH_TEMPLATE}, or
+add an @samp{#undef} directive to a hand-written header template.  An
+omitted symbol remains undefined in the generated header, without a
+diagnostic.  This works only when all possible names are known in advance.
+See @ref{Autoheader Macros} and @ref{Configuration Headers}.
 @end defmac
 
 Due to a syntactical oddity of the Bourne shell, do not use
