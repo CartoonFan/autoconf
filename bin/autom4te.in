@@ -491,21 +491,21 @@ Try '$me --help' for more information."
 	  push @argv, "${expecting}=$_";
 	  $expecting = "";
 	}
+      elsif ($_ eq '-D' || $_ eq '--define')
+	{
+	  $expecting = "--define";
+	}
+      elsif ($_ eq '-U' || $_ eq '--undefine')
+	{
+	  $expecting = "--undefine";
+	}
       elsif (/^-(?:D=?|-define=)(.*)$/)
 	{
 	  push @argv, "--define=$1";
 	}
-      elsif (/^-(?:D|define)/)
-	{
-	  $expecting = "--define";
-	}
       elsif (/^-(?:U=?|-undefine=)(.*)$/)
 	{
-	  push @argv, "--define=$1"
-	}
-      elsif (/^-(?:U|-undefine)/)
-	{
-	  $expecting = "--undefine";
+	  push @argv, "--undefine=$1";
 	}
       elsif ($_ eq '-')
 	{
