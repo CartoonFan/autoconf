@@ -584,38 +584,56 @@ fi
 # AT_CHECK_AUTOHEADER(ARGS, EXPECTED_TMPLS, [EXIT-STATUS = 0], STDOUT, STDERR)
 # ----------------------------------------------------------------------------
 # EXPECTED_TMPLS is a whitespace-separated list of template
-# definitions that should appear in the generated config.hin.
-# The stock definitions made by AC_INIT are also checked for.
+# definitions that should appear in the generated config.h.in.
+# The stock definitions made by AC_INIT are also checked for, unless
+# the special token '.NOINIT.' occurs in EXPECTED_TMPLS.
 # If EXPECTED_TMPLS is the single word 'ignore', or if the
 # expected exit status is not 0, this test is skipped.
 m4_define([AT_CHECK_AUTOHEADER],
 [AT_CHECK_M4([autoheader $1], [$3], [$4], [$5])
 m4_if(m4_strip([$2]), [ignore], [],
-  [m4_if(m4_default_nblank([$3], [0]), [0], [dnl
-if test -f config.h.in
-then config_h_in=config.h.in
-elif test -f config.hin
-then config_h_in=config.hin
-else AT_FAIL_IF([: "Cannot find autoheader template file"])
-fi
-m4_set_add_all([ah_expected_tmpls],
-  [PACKAGE_BUGREPORT],
-  [PACKAGE_NAME],
-  [PACKAGE_STRING],
-  [PACKAGE_TARNAME],
-  [PACKAGE_URL],
-  [PACKAGE_VERSION])dnl
-m4_map_args_w([$2],
-  [m4_set_add([ah_expected_tmpls],], [)])dnl
-AT_DATA([expout.in],[m4_set_dump([ah_expected_tmpls],[
+  [m4_if(m4_default_nblank([$3], [0]), [0],
+    [AT_CHECK_AUTOHEADER_OUTPUT([$2])])])])
+
+
+# AT_CHECK_AUTOHEADER_OUTPUT(EXPECTED_TMPLS, [CONFIG_H_IN = config.h.in])
+# -----------------------------------------------------------------------
+# EXPECTED_TMPLS is a whitespace-separated list of template definitions;
+# check that each of them appears in the generated config.h.in.
+# The stock definitions made by AC_INIT are also checked for, unless
+# the special token '.NOINIT.' occurs in EXPECTED_TMPLS.
+# If the second argument is given, definitions are checked for in that
+# file, instead of config.h.in.
+m4_define([AT_CHECK_AUTOHEADER_OUTPUT],
+[m4_ifnblank([$2],
+  [AS_VAR_SET([config_h_in], [$2])],
+  [AS_IF([test -f config.h.in], [config_h_in=config.h.in],
+         [test -f config.hin], [config_h_in=config.hin],
+         [AT_FAIL_IF([: "Cannot find autoheader template file"])])])
+m4_define([ah_init_], [1])dnl
+m4_foreach_w([ah_macro_], [$1],
+  [m4_if(ah_macro_, [.NOINIT.],
+    [m4_define([ah_init_], [0])],
+    [m4_set_add([ah_expected_tmpls], ah_macro_)])])dnl
+m4_if(ah_init_, [1],
+  [m4_set_add_all([ah_expected_tmpls],
+    [PACKAGE_BUGREPORT],
+    [PACKAGE_NAME],
+    [PACKAGE_STRING],
+    [PACKAGE_TARNAME],
+    [PACKAGE_URL],
+    [PACKAGE_VERSION])])dnl
+m4_undefine([ah_init_])dnl
+AT_DATA([exp-$config_h_in],[m4_set_dump([ah_expected_tmpls],[
 ])
 ])
-AT_CHECK([sort -o expout expout.in])
+AS_ECHO(["### checking contents of $config_h_in"]) >&2
+AT_CHECK([sort -o expout exp-$config_h_in])
 AT_CHECK([[sed -ne 's/^[	 ]*#[	 ]*undef[	 ][	 ]*//p' \
            $config_h_in | sort]],
   [0], [expout], [])
 AS_UNSET([config_h_in])
-])])])
+])
 
 
 # AT_CHECK_CONFIGURE(END-COMMAND,

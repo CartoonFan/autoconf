@@ -56,6 +56,7 @@ our ($config_h, %symbol, %verbatim);
 # Lib files.
 my $autom4te = $ENV{'AUTOM4TE'} || '@bindir@/@autom4te-name@';
 my $config_h_in;
+my $final_out;
 my @prepend_include;
 my @include;
 my @warnings;
@@ -131,6 +132,10 @@ sub parse_args ()
     {
       my $configure_ac = require_configure_ac;
       push @ARGV, $configure_ac;
+    }
+  else
+    {
+      $final_out = "-";
     }
 }
 
@@ -222,11 +227,18 @@ my @config_templates = map(templates_for_header($_), split(' ', $config_h));
 # We template only the first CONFIG_HEADER.
 $config_h_in = shift(@config_templates);
 $config_h =~ s/[ :].*//;
+$final_out = $config_h_in unless defined $final_out;
 
+# Skip the following checks if we are writing to standard output,
+# or to a file other than $config_h_in.
+if ($final_out ne $config_h_in)
+  {
+    1;
+  }
 # If $config_h_in already exists and doesn't appear to have been generated
 # by autoheader, stop, unless --replace-handwritten was given on the command
 # line.  This is not considered an error condition.
-if (open (my $fh, "<", $config_h_in))
+elsif (open (my $fh, "<", $config_h_in))
   {
     my $firstline = readline($fh);
     # If the file is empty, $firstline will be undef.  We _do_ want to
@@ -346,7 +358,7 @@ $out->close;
     if keys %symbol;
 }
 
-update_file ("$tmp/config.hin", "$config_h_in", $force);
+update_file ("$tmp/config.hin", "$final_out", $force);
 
 ### Setup "GNU" style for perl-mode and cperl-mode.
 ## Local Variables:

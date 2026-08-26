@@ -768,6 +768,7 @@ AT_CLEANUP
 # autoheader uses autoconf --trace, so traces first.
 
 AT_SETUP([autoheader])
+AT_KEYWORDS([autoheader])
 
 AT_DATA([acconfig.h],
 [[/* Define this to whatever you want. */
@@ -901,6 +902,7 @@ AT_CLEANUP
 # autoheader should see through m4 macros, just like autoconf
 # https://lists.gnu.org/archive/html/bug-autoconf/2009-06/msg00000.html
 AT_SETUP([autoheader and macros])
+AT_KEYWORDS([autoheader])
 
 AT_DATA([configure.ac],
 [[AC_INIT
@@ -933,10 +935,74 @@ config.h.in:0
 
 AT_CLEANUP
 
+# if given a file on the command line, autoheader should write the
+# header file to standard output, not to config.h.in, even if the file
+# in question is "configure.ac".
+AT_SETUP([autoheader writing to stdout])
+AT_KEYWORDS([autoheader])
+
+AT_DATA([configure.ac],
+[[AC_INIT
+AC_CONFIG_HEADERS([config.h])
+AC_DEFINE([HANNA], ["Hanna"], [Not Hannah])
+AC_DEFINE([SEAN], ["Sean"], [Sean's name])
+AC_OUTPUT
+]])
+
+AT_CHECK_AUTOCONF
+
+AT_CHECK_AUTOHEADER([configure.ac > config.h-tmpl], [ignore])
+AT_CHECK([test ! -f config.h.in])
+AT_CHECK([test ! -f config.hin])
+AT_CHECK_AUTOHEADER_OUTPUT([HANNA SEAN], [config.h-tmpl])
+
+AT_CHECK_AUTOHEADER([- < configure.ac > config.h-tmpl2], [ignore])
+AT_CHECK([test ! -f config.h.in])
+AT_CHECK([test ! -f config.hin])
+AT_CHECK_AUTOHEADER_OUTPUT([HANNA SEAN], [config.h-tmpl2])
+
+AT_CLEANUP
+
+# if given a file on the command line, autoheader should read that file,
+# even if configure.ac also exists
+AT_SETUP([autoheader reading alternative scripts])
+AT_KEYWORDS([autoheader])
+
+AT_DATA([configure.ac],
+[[AC_INIT
+AC_CONFIG_HEADERS([config.h])
+AC_DEFINE([HANNA], ["Hanna"], [Not Hannah])
+AC_DEFINE([SEAN], ["Sean"], [Sean's name])
+AC_OUTPUT
+]])
+AT_CHECK_AUTOCONF
+
+AT_DATA([configalt.ac],
+[[AC_INIT
+AC_CONFIG_HEADERS([configalt.h])
+AC_DEFINE([MARLEY], ["was dead"], [to begin with])
+AC_OUTPUT
+]])
+AT_CHECK_AUTOCONF([configalt.ac > configalt])
+AT_CHECK([test -s configalt])
+if test $SHELL_N != none; then
+  AT_CHECK_SHELL_SYNTAX([configalt])
+fi
+
+AT_CHECK_AUTOHEADER([configalt.ac > not-configalt.h.in], [ignore])
+AT_CHECK([test ! -f config.h.in])
+AT_CHECK([test ! -f config.hin])
+AT_CHECK([test ! -f configalt.h.in])
+AT_CHECK([test ! -f configalt.hin])
+AT_CHECK_AUTOHEADER_OUTPUT([MARLEY], [not-configalt.h.in])
+
+AT_CLEANUP
+
 
 # autoheader should take all config header inputs into account when
 # checking for missing templates.
 AT_SETUP([autoheader with multiple headers])
+AT_KEYWORDS([autoheader])
 
 AT_DATA([config-extra.h.in],
 [[/* Define this to whatever you want. */
@@ -952,6 +1018,7 @@ AC_OUTPUT
 
 AT_CHECK_AUTOCONF
 AT_CHECK_AUTOHEADER([], [SEAN])
+AT_CHECK_AUTOHEADER_OUTPUT([.NOINIT. HANNA], [config-extra.h.in])
 AT_CHECK([grep HANNA configure], [0], [ignore], [ignore])
 AT_CHECK([grep HANNA config.h.in], [1], [ignore], [ignore])
 AT_CHECK([grep SEAN configure], [0], [ignore], [ignore])
@@ -1007,6 +1074,7 @@ AT_CLEANUP
 
 # autoheader _should_ update an empty template file.
 AT_SETUP([autoheader updates an empty template])
+AT_KEYWORDS([autoheader])
 
 AT_DATA([config.h.in], [[]])
 
@@ -1747,8 +1815,8 @@ END
 [AC_DEFUN([AC_MACRO], [echo hi])]
 END
 
-  AT_CHECK_AUTOHEADER([-B "$dir" "$file.ac"])
-  AT_CHECK_AUTOHEADER([--force -I "$dir" "$file.ac"])
+  AT_CHECK_AUTOHEADER([-B "$dir" "$file.ac" > "config.hin"])
+  AT_CHECK_AUTOHEADER([--force -I "$dir" "$file.ac" > "config.hin"])
   AT_CHECK_AUTOUPDATE([-B "$dir" "$file.ac"])
   AT_CHECK_AUTOUPDATE([--force -I "$dir" "$file.ac"])
   AT_CHECK_AUTOUPDATE([-B "$dir" - < "$file.ac"], [], [ignore])
@@ -1775,8 +1843,8 @@ done
 
 AT_CLEANUP
 
-# autotools and file names containing whitespace
-# ----------------------------------------------
+# autotools and relative TMPDIR
+# -----------------------------
 
 AT_SETUP([autotools and relative TMPDIR])
 

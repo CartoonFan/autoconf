@@ -4,6 +4,14 @@ GNU Autoconf NEWS - User visible changes.
 
 ** Notable bug fixes
 
+*** autoreconf now writes the generated template file to standard output
+    when invoked with an input file name or ‘-’ on its command line.
+
+  This is how it has always been documented to behave, but for a very
+  long time (at least nine years) it has instead written to the first
+  template file mentioned in AC_CONFIG_HEADERS, no matter what its
+  arguments were.
+
 *** AC_C_RESTRICT no longer triggers -Wkeyword-macro warnings from GCC 16.
 
 * Noteworthy changes in release 2.73 (2026-03-20) [release]
